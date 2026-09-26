@@ -111,18 +111,18 @@ function issueToken() {
 
 async function openPlayerSession(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
-  player: { id: number; displayName: string; loginTokenHash: string },
+  player: { id: number; displayName: string; loginTokenHash: string; burnedFingerUnlocked: boolean },
   suppliedToken?: string,
 ) {
   if (suppliedToken && hashToken(suppliedToken) === player.loginTokenHash) {
-    return { playerId: player.id, name: player.displayName, token: suppliedToken, returning: true };
+    return { playerId: player.id, name: player.displayName, token: suppliedToken, returning: true, burnedFingerUnlocked: player.burnedFingerUnlocked };
   }
 
   // A known nickname is the passwordless identity for this friends-only site.
   // Issue a fresh device token so a returning player can recover the same score.
   const token = issueToken();
   await db.update(noodlePlayers).set({ loginTokenHash: hashToken(token) }).where(eq(noodlePlayers.id, player.id));
-  return { playerId: player.id, name: player.displayName, token, returning: true };
+  return { playerId: player.id, name: player.displayName, token, returning: true, burnedFingerUnlocked: player.burnedFingerUnlocked };
 }
 
 export async function joinNoodlePlayer(name: string, existingToken?: string) {
@@ -133,6 +133,7 @@ export async function joinNoodlePlayer(name: string, existingToken?: string) {
     id: noodlePlayers.id,
     displayName: noodlePlayers.displayName,
     loginTokenHash: noodlePlayers.loginTokenHash,
+    burnedFingerUnlocked: noodlePlayers.burnedFingerUnlocked,
   }).from(noodlePlayers).where(eq(noodlePlayers.nameKey, nameKey)).limit(1);
 
   if (existing[0]) return openPlayerSession(db, existing[0], existingToken);
@@ -157,6 +158,7 @@ export async function joinNoodlePlayer(name: string, existingToken?: string) {
         id: noodlePlayers.id,
         displayName: noodlePlayers.displayName,
         loginTokenHash: noodlePlayers.loginTokenHash,
+        burnedFingerUnlocked: noodlePlayers.burnedFingerUnlocked,
       }).from(noodlePlayers).where(eq(noodlePlayers.nameKey, nameKey)).limit(1);
       if (racedPlayer[0]) return openPlayerSession(db, racedPlayer[0]);
     }
@@ -166,7 +168,7 @@ export async function joinNoodlePlayer(name: string, existingToken?: string) {
   const created = await db.select({ id: noodlePlayers.id, displayName: noodlePlayers.displayName })
     .from(noodlePlayers).where(eq(noodlePlayers.nameKey, nameKey)).limit(1);
   if (!created[0]) throw new Error("Could not load the newly created player");
-  return { playerId: created[0].id, name: created[0].displayName, token, returning: false };
+  return { playerId: created[0].id, name: created[0].displayName, token, returning: false, burnedFingerUnlocked: false };
 }
 
 function boardColumn(board: NoodleBoard) {
@@ -190,7 +192,7 @@ export async function getNoodleLeaderboard(token?: string, board: NoodleBoard = 
     .limit(10);
 
   let me: { playerId: number; name: string; score: number; rank: number } | null = null;
-  let playerProgress: { playerId: number; name: string; totalClicks: number; experience: string } | null = null;
+  let playerProgress: { playerId: number; name: string; totalClicks: number; experience: string; burnedFingerUnlocked: boolean } | null = null;
   if (token) {
     const tokenHash = hashToken(token);
     const playerRows = await db.select({
@@ -199,6 +201,7 @@ export async function getNoodleLeaderboard(token?: string, board: NoodleBoard = 
       score: scoreColumn,
       totalClicks: noodlePlayers.totalClicks,
       experience: noodlePlayers.experience,
+      burnedFingerUnlocked: noodlePlayers.burnedFingerUnlocked,
     }).from(noodlePlayers).where(eq(noodlePlayers.loginTokenHash, tokenHash)).limit(1);
     const player = playerRows[0];
     if (player) {
@@ -207,6 +210,7 @@ export async function getNoodleLeaderboard(token?: string, board: NoodleBoard = 
         name: player.name,
         totalClicks: player.totalClicks,
         experience: player.experience,
+        burnedFingerUnlocked: player.burnedFingerUnlocked,
       };
     }
     if (player && (board === "total" || player.score > 0)) {
@@ -256,5 +260,19 @@ export async function recordNoodleClick(token: string, mood: NoodleMood): Promis
 
     const updated = await tx.select().from(noodlePlayers).where(eq(noodlePlayers.id, player.id)).limit(1);
     return updated[0] ? { player: updated[0], previousExperience } : null;
+  });
+}
+
+export async function unlockBurnedFingerAchievement(token: string): Promise<boolean | null> {
+  const db = await requireNoodleDb();
+  const tokenHash = hashToken(token);
+  return db.transaction(async (tx) => {
+    const rows = await tx.select({ id: noodlePlayers.id, unlocked: noodlePlayers.burnedFingerUnlocked })
+      .from(noodlePlayers).where(eq(noodlePlayers.loginTokenHash, tokenHash)).limit(1).for("update");
+    const player = rows[0];
+    if (!player) return null;
+    if (player.unlocked) return false;
+    await tx.update(noodlePlayers).set({ burnedFingerUnlocked: true }).where(eq(noodlePlayers.id, player.id));
+    return true;
   });
 }

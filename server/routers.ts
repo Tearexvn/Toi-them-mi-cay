@@ -12,6 +12,7 @@ import {
   NoodleBoard,
   NoodleMood,
   recordNoodleClick,
+  unlockBurnedFingerAchievement,
 } from "./db";
 
 const nameInput = z.string().trim().min(1, "Nhập tên trước đã nhé.").max(24, "Tên tối đa 24 ký tự thôi nhé.")
@@ -61,6 +62,20 @@ export const appRouter = router({
         try {
           return await joinNoodlePlayer(name, input.token);
         } catch (error) {
+          mapIdentityError(error);
+        }
+      }),
+    unlockBurnedFinger: publicProcedure
+      .input(z.object({ token: tokenInput }))
+      .mutation(async ({ input }) => {
+        try {
+          const newlyUnlocked = await unlockBurnedFingerAchievement(input.token);
+          if (newlyUnlocked === null) {
+            throw new TRPCError({ code: "UNAUTHORIZED", message: "Phiên chơi không còn hợp lệ. Hãy nhập lại tên nhé." });
+          }
+          return { newlyUnlocked };
+        } catch (error) {
+          if (error instanceof TRPCError) throw error;
           mapIdentityError(error);
         }
       }),

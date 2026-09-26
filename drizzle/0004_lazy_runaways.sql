@@ -1,0 +1,1 @@
+ALTER TABLE `noodle_players` ADD `burnedFingerUnlocked` boolean DEFAULT false NOT NULL;

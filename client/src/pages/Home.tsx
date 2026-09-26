@@ -1,4 +1,4 @@
-import { useMemo, useReducer, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { trpc } from "@/lib/trpc";
 import { RefreshCw } from "lucide-react";
 import {
@@ -9,7 +9,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { getAchievementPanelState, NOODLE_ACHIEVEMENTS } from "@shared/noodle-achievements";
+import {
+  getAchievementPanelState,
+  getSecretHoldProgress,
+  getUnlockedAchievements,
+  isSecretHoldComplete,
+  NOODLE_ACHIEVEMENTS,
+  SECRET_HOLD_DURATION_MS,
+} from "@shared/noodle-achievements";
 import { leaderboardSelectionReducer, type LeaderboardBoard } from "@shared/leaderboard-selection";
 import {
   addNoodleExperience,
@@ -31,6 +38,14 @@ type FireStyle = CSSProperties & {
   "--fire-duration": string;
   "--fire-drift": string;
 };
+type FireworkStyle = CSSProperties & {
+  "--firework-x": string;
+  "--firework-y": string;
+  "--firework-delay": string;
+  "--firework-color": string;
+  "--firework-size": string;
+};
+type HoldButtonStyle = CSSProperties & { "--hold-progress": number };
 type XpGainStyle = CSSProperties & { "--xp-drift": string };
 
 const moods: { id: Mood; label: string; emoji: string; note: string }[] = [
@@ -66,6 +81,28 @@ function createFireDrops() {
   }));
 }
 
+function createAchievementFireworks() {
+  const colors = ["#ffcf66", "#ff6545", "#ff9f43", "#fff1b8", "#f04a32"];
+  return Array.from({ length: 54 }, (_, index) => {
+    const burstIndex = Math.floor(index / 18);
+    const angle = ((index % 18) / 18) * Math.PI * 2 + Math.random() * 0.12;
+    const distance = 54 + Math.random() * 112;
+    return {
+      id: `${Date.now()}-${index}-${Math.random()}`,
+      symbol: index % 4 === 0 ? "✦" : index % 4 === 1 ? "✧" : "•",
+      style: {
+        left: `${22 + burstIndex * 28 + Math.random() * 5}%`,
+        top: `${9 + Math.random() * 17}%`,
+        "--firework-x": `${Math.cos(angle) * distance}px`,
+        "--firework-y": `${Math.sin(angle) * distance}px`,
+        "--firework-delay": `${Math.random() * 150}ms`,
+        "--firework-color": colors[Math.floor(Math.random() * colors.length)],
+        "--firework-size": `${10 + Math.random() * 14}px`,
+      } as FireworkStyle,
+    };
+  });
+}
+
 function createXpGainPop() {
   return {
     id: `${Date.now()}-${Math.random()}`,
@@ -96,10 +133,22 @@ export default function Home() {
   const [activeBoard, dispatchBoard] = useReducer(leaderboardSelectionReducer, "total");
   const [particles, setParticles] = useState<{ id: number; style: ParticleStyle }[]>([]);
   const [fireDrops, setFireDrops] = useState<ReturnType<typeof createFireDrops>>([]);
+  const [achievementFireworks, setAchievementFireworks] = useState<ReturnType<typeof createAchievementFireworks>>([]);
   const [xpGainPops, setXpGainPops] = useState<ReturnType<typeof createXpGainPop>[]>([]);
   const [achievementDialogOpen, setAchievementDialogOpen] = useState(false);
+  const [achievementToastOpen, setAchievementToastOpen] = useState(false);
+  const [burnedFingerUnlockedLocal, setBurnedFingerUnlockedLocal] = useState(false);
+  const [isHoldingNoodle, setIsHoldingNoodle] = useState(false);
+  const [holdProgress, setHoldProgress] = useState(0);
+  const [isExploding, setIsExploding] = useState(false);
   const [optimisticExperience, setOptimisticExperience] = useState<string | null>(null);
   const optimisticExperienceRef = useRef<string | null>(null);
+  const holdStartedAtRef = useRef<number | null>(null);
+  const holdIntervalRef = useRef<number | null>(null);
+  const holdTriggeredRef = useRef(false);
+  const toastTimeoutRef = useRef<number | null>(null);
+  const fireworksTimeoutRef = useRef<number | null>(null);
+  const explosionTimeoutRef = useRef<number | null>(null);
   const [playerToken, setPlayerToken] = useState(() => readSession(TOKEN_KEY));
   const [playerName, setPlayerName] = useState(() => readSession(NAME_KEY));
   const [draftName, setDraftName] = useState("");
@@ -114,10 +163,42 @@ export default function Home() {
     leaderboardInput,
     { refetchInterval: 10_000, refetchOnWindowFocus: true, retry: 1 },
   );
+  const unlockAchievement = trpc.noodle.unlockBurnedFinger.useMutation({
+    onSuccess: (result) => {
+      setBurnedFingerUnlockedLocal(true);
+      if (!result.newlyUnlocked) return;
+      setAchievementToastOpen(true);
+      if (toastTimeoutRef.current !== null) window.clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = window.setTimeout(() => setAchievementToastOpen(false), 5_500);
+      void utils.noodle.leaderboard.invalidate();
+    },
+    onError: (error) => {
+      holdTriggeredRef.current = false;
+      setNotice(error.message || "Chưa lưu được thành tựu. Thử giữ lại lần nữa nhé.");
+    },
+  });
   function refreshLeaderboard() {
     dispatchBoard({ type: "refresh" });
     void leaderboard.refetch();
   }
+  useEffect(() => {
+    const cancelHoldOnHiddenPage = () => {
+      if (!document.hidden) return;
+      holdStartedAtRef.current = null;
+      if (holdIntervalRef.current !== null) window.clearInterval(holdIntervalRef.current);
+      holdIntervalRef.current = null;
+      setIsHoldingNoodle(false);
+      setHoldProgress(0);
+    };
+    document.addEventListener("visibilitychange", cancelHoldOnHiddenPage);
+    return () => {
+      document.removeEventListener("visibilitychange", cancelHoldOnHiddenPage);
+      if (holdIntervalRef.current !== null) window.clearInterval(holdIntervalRef.current);
+      if (toastTimeoutRef.current !== null) window.clearTimeout(toastTimeoutRef.current);
+      if (fireworksTimeoutRef.current !== null) window.clearTimeout(fireworksTimeoutRef.current);
+      if (explosionTimeoutRef.current !== null) window.clearTimeout(explosionTimeoutRef.current);
+    };
+  }, []);
   const joinPlayer = trpc.noodle.join.useMutation({
     onSuccess: (session) => {
       try {
@@ -128,6 +209,8 @@ export default function Home() {
       }
       setPlayerToken(session.token);
       setPlayerName(session.name);
+      setBurnedFingerUnlockedLocal(session.burnedFingerUnlocked);
+      holdTriggeredRef.current = false;
       setDraftName("");
       optimisticExperienceRef.current = null;
       setOptimisticExperience(null);
@@ -173,6 +256,57 @@ export default function Home() {
     ? serverExperience
     : maxNoodleExperience(serverExperience, optimisticExperience);
   const levelProgress = useMemo(() => getNoodleLevelProgress(experience), [experience]);
+  const burnedFingerUnlocked = burnedFingerUnlockedLocal || Boolean(leaderboard.data?.player?.burnedFingerUnlocked);
+  const unlockedAchievements = useMemo(
+    () => [...NOODLE_ACHIEVEMENTS, ...getUnlockedAchievements(burnedFingerUnlocked)],
+    [burnedFingerUnlocked],
+  );
+
+  function completeBurnerHold() {
+    if (holdTriggeredRef.current || !playerToken || burnedFingerUnlocked) return;
+    holdTriggeredRef.current = true;
+    holdStartedAtRef.current = null;
+    if (holdIntervalRef.current !== null) window.clearInterval(holdIntervalRef.current);
+    holdIntervalRef.current = null;
+    setIsHoldingNoodle(false);
+    setHoldProgress(1);
+    setIsExploding(true);
+    if (explosionTimeoutRef.current !== null) window.clearTimeout(explosionTimeoutRef.current);
+    explosionTimeoutRef.current = window.setTimeout(() => setIsExploding(false), 650);
+    const fireworks = createAchievementFireworks();
+    setAchievementFireworks(fireworks);
+    if (fireworksTimeoutRef.current !== null) window.clearTimeout(fireworksTimeoutRef.current);
+    fireworksTimeoutRef.current = window.setTimeout(() => setAchievementFireworks([]), 2_500);
+    unlockAchievement.mutate({ token: playerToken });
+  }
+
+  function beginBurnerHold() {
+    if (!playerToken || !leaderboard.data?.player || burnedFingerUnlocked || holdStartedAtRef.current !== null || holdTriggeredRef.current) return;
+    holdStartedAtRef.current = Date.now();
+    setHoldProgress(0);
+    setIsHoldingNoodle(true);
+    holdIntervalRef.current = window.setInterval(() => {
+      const startedAt = holdStartedAtRef.current;
+      if (startedAt === null) return;
+      const elapsed = Date.now() - startedAt;
+      setHoldProgress(getSecretHoldProgress(elapsed));
+      if (isSecretHoldComplete(elapsed)) completeBurnerHold();
+    }, 40);
+  }
+
+  function endBurnerHold() {
+    const startedAt = holdStartedAtRef.current;
+    if (startedAt === null) return;
+    if (isSecretHoldComplete(Date.now() - startedAt)) {
+      completeBurnerHold();
+      return;
+    }
+    holdStartedAtRef.current = null;
+    if (holdIntervalRef.current !== null) window.clearInterval(holdIntervalRef.current);
+    holdIntervalRef.current = null;
+    setIsHoldingNoodle(false);
+    setHoldProgress(0);
+  }
 
   function makeItRain() {
     if (!playerToken) {
@@ -246,6 +380,13 @@ export default function Home() {
     }
     setPlayerToken("");
     setPlayerName("");
+    setBurnedFingerUnlockedLocal(false);
+    holdTriggeredRef.current = false;
+    holdStartedAtRef.current = null;
+    if (holdIntervalRef.current !== null) window.clearInterval(holdIntervalRef.current);
+    holdIntervalRef.current = null;
+    setIsHoldingNoodle(false);
+    setHoldProgress(0);
     optimisticExperienceRef.current = null;
     setOptimisticExperience(null);
     setXpGainPops([]);
@@ -263,6 +404,28 @@ export default function Home() {
       {fireDrops.length > 0 && (
         <div className="level-up-rain" aria-hidden="true">
           {fireDrops.map((drop) => <span key={drop.id} className="fire-drop" style={drop.style}>{drop.emoji}</span>)}
+        </div>
+      )}
+      {achievementFireworks.length > 0 && (
+        <div className="achievement-fireworks" aria-hidden="true">
+          {achievementFireworks.map((spark) => <span key={spark.id} className="achievement-firework" style={spark.style}>{spark.symbol}</span>)}
+        </div>
+      )}
+      {achievementToastOpen && (
+        <div className="achievement-toast-wrap">
+          <div className="achievement-toast" role="status" aria-live="polite" aria-atomic="true">
+            <span className="achievement-toast-icon" aria-hidden="true">🏆</span>
+            <span className="achievement-toast-copy">Bạn đã nhận được thành tựu ẩn <strong>“Bỏng tay chưa?”</strong></span>
+            <button
+              className="achievement-toast-close"
+              type="button"
+              aria-label="Đóng thông báo thành tựu"
+              onClick={() => {
+                setAchievementToastOpen(false);
+                if (toastTimeoutRef.current !== null) window.clearTimeout(toastTimeoutRef.current);
+              }}
+            >×</button>
+          </div>
         </div>
       )}
       <div className="ambient ambient-one" aria-hidden="true">{activeMood.emoji}</div>
@@ -309,7 +472,9 @@ export default function Home() {
         ) : (
           <div className="player-welcome">
             <span className="welcome-avatar" aria-hidden="true">🍜</span>
-            <span>đang chơi với tên <strong>{playerName}</strong></span>
+            <span className="welcome-copy">đang chơi với tên <strong>{playerName}</strong>
+              {burnedFingerUnlocked && <span className="secret-achievement-badge">🔥 Bỏng tay chưa?</span>}
+            </span>
             <button type="button" onClick={leavePlayer} className="change-player">đổi tên</button>
           </div>
         )}
@@ -323,7 +488,42 @@ export default function Home() {
               <span key={particle.id} className="noodle-particle" style={particle.style}>🍜</span>
             ))}
           </div>
-          <button className="noodle-button" onClick={makeItRain} aria-label="Bấm để mì cay bay tung tóe">
+          <button
+            className={`noodle-button ${isHoldingNoodle ? "is-holding" : ""} ${isExploding ? "is-exploding" : ""}`}
+            onClick={makeItRain}
+            onPointerDown={(event) => {
+              if (event.pointerType === "mouse" && event.button !== 0) return;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              beginBurnerHold();
+            }}
+            onPointerUp={endBurnerHold}
+            onPointerCancel={endBurnerHold}
+            onLostPointerCapture={endBurnerHold}
+            onKeyDown={(event) => {
+              if ((event.key === " " || event.key === "Enter") && !event.repeat) {
+                event.preventDefault();
+                beginBurnerHold();
+              }
+            }}
+            onKeyUp={(event) => {
+              if (event.key === " " || event.key === "Enter") {
+                event.preventDefault();
+                endBurnerHold();
+                makeItRain();
+              }
+            }}
+            onContextMenu={(event) => event.preventDefault()}
+            aria-label={playerToken
+              ? `Bấm để mì cay bay tung tóe; giữ ${SECRET_HOLD_DURATION_MS / 1000} giây để sạc ngọn lửa`
+              : "Bấm để mì cay bay tung tóe; giữ để sạc ngọn lửa"}
+          >
+            {(isHoldingNoodle || isExploding) && (
+              <span
+                className={`hold-flame ${isExploding ? "is-exploding" : ""}`}
+                aria-hidden="true"
+                style={{ transform: `translateX(-50%) scale(${0.72 + holdProgress * 2.45})` }}
+              >🔥</span>
+            )}
             <span className="button-bowl" aria-hidden="true">🍜</span>
             <span>mì cay</span>
             <span className="button-spark" aria-hidden="true">✳</span>
@@ -363,7 +563,7 @@ export default function Home() {
             <button className="achievement-launch" type="button" aria-haspopup="dialog">
               <span aria-hidden="true">🏆</span>
               <span>Thành tựu</span>
-              <span className="achievement-launch-tag">sắp có</span>
+              <span className="achievement-launch-tag">{burnedFingerUnlocked ? "đã mở khóa" : "sắp có"}</span>
             </button>
           </DialogTrigger>
           <DialogContent className="achievement-dialog">
@@ -374,7 +574,7 @@ export default function Home() {
                 Một góc nhỏ để khoe những lần thèm mì đáng nhớ.
               </DialogDescription>
             </DialogHeader>
-            {getAchievementPanelState(NOODLE_ACHIEVEMENTS) === "empty" ? (
+            {getAchievementPanelState(unlockedAchievements) === "empty" ? (
               <section className="achievement-empty-state" aria-live="polite">
                 <span className="achievement-empty-illustration" aria-hidden="true">🍜✨</span>
                 <h3>Chưa có thành tựu nào</h3>
@@ -383,7 +583,7 @@ export default function Home() {
               </section>
             ) : (
               <div className="achievement-list" role="list">
-                {NOODLE_ACHIEVEMENTS.map((achievement) => (
+                {unlockedAchievements.map((achievement) => (
                   <article className="achievement-item" key={achievement.id} role="listitem">
                     <span aria-hidden="true">{achievement.icon}</span>
                     <div>

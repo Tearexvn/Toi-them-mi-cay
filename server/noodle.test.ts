@@ -45,6 +45,16 @@ describe("noodle player names", () => {
     await expectBadRequest(() => caller.noodle.click({ token: "short", mood: "beef" }));
   });
 
+  it("rejects short tokens before attempting to unlock an achievement", async () => {
+    const caller = createPublicCaller();
+    await expectBadRequest(() => caller.noodle.unlockBurnedFinger({ token: "short" }));
+  });
+
+  it("rejects short tokens before attempting to unlock an achievement", async () => {
+    const caller = createPublicCaller();
+    await expectBadRequest(() => caller.noodle.unlockBurnedFinger({ token: "short" }));
+  });
+
   it("rejects unsupported topping values", async () => {
     const caller = createPublicCaller();
     await expectBadRequest(() => caller.noodle.click({ token: "a".repeat(32), mood: "pizza" as never }));
