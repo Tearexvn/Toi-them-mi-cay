@@ -69,11 +69,13 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const mood: NoodleMood = input.mood;
         try {
-          const player = await recordNoodleClick(input.token, mood);
-          if (!player) throw new TRPCError({ code: "UNAUTHORIZED", message: "Phiên chơi không còn hợp lệ. Hãy nhập lại tên nhé." });
+          const result = await recordNoodleClick(input.token, mood);
+          if (!result) throw new TRPCError({ code: "UNAUTHORIZED", message: "Phiên chơi không còn hợp lệ. Hãy nhập lại tên nhé." });
+          const player = result.player;
           return {
             totalClicks: player.totalClicks,
             experience: player.experience,
+            previousExperience: result.previousExperience,
             beefClicks: player.beefClicks,
             chickenClicks: player.chickenClicks,
             octopusClicks: player.octopusClicks,

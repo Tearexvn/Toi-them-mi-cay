@@ -47,3 +47,10 @@ export function getNoodleLevelProgress(experience: bigint | number | string): No
     progressPercent: Math.min(100, progressPercent),
   };
 }
+
+export function didNoodleLevelUp(
+  previousExperience: bigint | number | string,
+  nextExperience: bigint | number | string,
+) {
+  return getNoodleLevelProgress(nextExperience).level > getNoodleLevelProgress(previousExperience).level;
+}

@@ -84,6 +84,7 @@ export class NoodleIdentityError extends Error {
 
 export type NoodleMood = "beef" | "chicken" | "octopus";
 export type NoodleBoard = NoodleMood | "total";
+export type NoodleClickResult = { player: NoodlePlayer; previousExperience: string };
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -225,7 +226,7 @@ export async function getNoodleLeaderboard(token?: string, board: NoodleBoard = 
   return { top, me, player: playerProgress };
 }
 
-export async function recordNoodleClick(token: string, mood: NoodleMood): Promise<NoodlePlayer | null> {
+export async function recordNoodleClick(token: string, mood: NoodleMood): Promise<NoodleClickResult | null> {
   const db = await requireNoodleDb();
   const tokenHash = hashToken(token);
   return db.transaction(async (tx) => {
@@ -234,8 +235,9 @@ export async function recordNoodleClick(token: string, mood: NoodleMood): Promis
     const player = playerRows[0];
     if (!player) return null;
 
+    const previousExperience = player.experience || "0";
     const totalClicks = sql`${noodlePlayers.totalClicks} + 1`;
-    const experience = (BigInt(player.experience || "0") + BigInt(1)).toString();
+    const experience = (BigInt(previousExperience) + BigInt(1)).toString();
     const clickUpdate = { totalClicks, experience };
     switch (mood) {
       case "beef":
@@ -253,6 +255,6 @@ export async function recordNoodleClick(token: string, mood: NoodleMood): Promis
     }
 
     const updated = await tx.select().from(noodlePlayers).where(eq(noodlePlayers.id, player.id)).limit(1);
-    return updated[0] ?? null;
+    return updated[0] ? { player: updated[0], previousExperience } : null;
   });
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getNoodleLevelProgress } from "../shared/noodle-level";
+import { didNoodleLevelUp, getNoodleLevelProgress } from "../shared/noodle-level";
 
 const xp = (value: number | string) => BigInt(value);
 
@@ -58,5 +58,11 @@ describe("noodle level progression", () => {
       totalExperience: xp(0),
       experienceForNextLevel: xp(100),
     });
+  });
+
+  it("signals a level-up only when a click crosses the next XP threshold", () => {
+    expect(didNoodleLevelUp(xp(98), xp(99))).toBe(false);
+    expect(didNoodleLevelUp(xp(99), xp(100))).toBe(true);
+    expect(didNoodleLevelUp(xp(100), xp(101))).toBe(false);
   });
 });

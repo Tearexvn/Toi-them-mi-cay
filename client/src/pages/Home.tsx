@@ -1,6 +1,6 @@
 import { useMemo, useState, type CSSProperties, type FormEvent } from "react";
 import { trpc } from "@/lib/trpc";
-import { getNoodleLevelProgress } from "@shared/noodle-level";
+import { didNoodleLevelUp, getNoodleLevelProgress } from "@shared/noodle-level";
 
 type Mood = "beef" | "chicken" | "octopus";
 type Board = Mood | "total";
@@ -9,6 +9,10 @@ type ParticleStyle = CSSProperties & {
   "--dy": string;
   "--rot": string;
   "--duration": string;
+};
+type FireStyle = CSSProperties & {
+  "--fire-duration": string;
+  "--fire-drift": string;
 };
 
 const moods: { id: Mood; label: string; emoji: string; note: string }[] = [
@@ -24,15 +28,25 @@ const boards: { id: Board; label: string; emoji: string }[] = [
   { id: "octopus", label: "Mì bạch tuộc", emoji: "🐙" },
 ];
 
-const scoreFields = {
-  total: "totalClicks",
-  beef: "beefClicks",
-  chicken: "chickenClicks",
-  octopus: "octopusClicks",
-} as const;
-
 const TOKEN_KEY = "mi-cay-player-token";
 const NAME_KEY = "mi-cay-player-name";
+const fireEmojis = ["🔥", "🔥", "✨", "🔥", "🧨"];
+
+function createFireDrops() {
+  const createdAt = Date.now();
+  return Array.from({ length: 34 }, (_, index) => ({
+    id: `${createdAt}-${index}-${Math.random()}`,
+    emoji: fireEmojis[Math.floor(Math.random() * fireEmojis.length)],
+    style: {
+      left: `${Math.random() * 100}%`,
+      top: "-38px",
+      fontSize: `${16 + Math.random() * 20}px`,
+      animationDelay: `${Math.random() * 420}ms`,
+      "--fire-duration": `${1850 + Math.random() * 850}ms`,
+      "--fire-drift": `${Math.random() * 170 - 85}px`,
+    } as FireStyle,
+  }));
+}
 
 function readSession(key: string) {
   try {
@@ -53,7 +67,8 @@ export default function Home() {
   const [mood, setMood] = useState<Mood>("beef");
   const [activeBoard, setActiveBoard] = useState<Board>("total");
   const [particles, setParticles] = useState<{ id: number; style: ParticleStyle }[]>([]);
-  const [clicksThisVisit, setClicksThisVisit] = useState(0);
+  const [fireDrops, setFireDrops] = useState<ReturnType<typeof createFireDrops>>([]);
+  const [xpGainKey, setXpGainKey] = useState(0);
   const [playerToken, setPlayerToken] = useState(() => readSession(TOKEN_KEY));
   const [playerName, setPlayerName] = useState(() => readSession(NAME_KEY));
   const [draftName, setDraftName] = useState("");
@@ -86,18 +101,26 @@ export default function Home() {
     },
   });
   const recordClick = trpc.noodle.click.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      setXpGainKey((current) => current + 1);
+      if (didNoodleLevelUp(result.previousExperience, result.experience)) {
+        const drops = createFireDrops();
+        const expiredIds = new Set(drops.map((drop) => drop.id));
+        setFireDrops(drops);
+        window.setTimeout(() => {
+          setFireDrops((current) => current.filter((drop) => !expiredIds.has(drop.id)));
+        }, 3300);
+      }
       await utils.noodle.leaderboard.invalidate();
     },
     onError: (error) => setNotice(error.message || "Không ghi được lượt bấm. Thử lại nhé."),
   });
 
   const activeMood = moods.find((item) => item.id === mood) ?? moods[0];
-  const scoreField = scoreFields[activeBoard];
-  const lastRecordedScore = recordClick.variables?.token === playerToken
-    ? recordClick.data?.[scoreField] ?? 0
+  const lastRecordedTotalClicks = recordClick.variables?.token === playerToken
+    ? recordClick.data?.totalClicks ?? 0
     : 0;
-  const myScore = Math.max(leaderboard.data?.me?.score ?? 0, lastRecordedScore);
+  const totalClicks = Math.max(leaderboard.data?.player?.totalClicks ?? 0, lastRecordedTotalClicks);
   const activeBoardLabel = boards.find((board) => board.id === activeBoard)?.label ?? "Tổng";
   const lastRecordedExperience = recordClick.variables?.token === playerToken ? recordClick.data?.experience : undefined;
   const experience = lastRecordedExperience ?? leaderboard.data?.player?.experience ?? "0";
@@ -131,7 +154,6 @@ export default function Home() {
     });
 
     setParticles((current) => [...current.slice(-28), ...newParticles]);
-    setClicksThisVisit((current) => current + 1);
     setNotice("");
     recordClick.mutate({ token: playerToken, mood });
     window.setTimeout(() => {
@@ -159,7 +181,6 @@ export default function Home() {
     }
     setPlayerToken("");
     setPlayerName("");
-    setClicksThisVisit(0);
     setNotice("Đã thoát khỏi lượt chơi. Điểm cũ vẫn nằm trên BXH nhé.");
     void utils.noodle.leaderboard.invalidate();
   }
@@ -170,6 +191,11 @@ export default function Home() {
   return (
     <main className="site-shell" data-theme={mood}>
       <div className="paper-grain" aria-hidden="true" />
+      {fireDrops.length > 0 && (
+        <div className="level-up-rain" aria-hidden="true">
+          {fireDrops.map((drop) => <span key={drop.id} className="fire-drop" style={drop.style}>{drop.emoji}</span>)}
+        </div>
+      )}
       <div className="ambient ambient-one" aria-hidden="true">{activeMood.emoji}</div>
       <div className="ambient ambient-two" aria-hidden="true">🌶️</div>
       <div className="ambient ambient-three" aria-hidden="true">{activeMood.emoji}</div>
@@ -234,9 +260,6 @@ export default function Home() {
         <div className="level-progress" aria-label="Tiến độ cấp mì cay">
           <div className="level-progress-heading">
             <strong className="level-name">🍜 mì cay cấp {levelProgress.level.toString()}</strong>
-            <span className="level-xp-count">
-              {levelProgress.currentLevelExperience.toLocaleString("vi-VN")} / {levelProgress.experienceForNextLevel.toLocaleString("vi-VN")} XP
-            </span>
           </div>
           <div
             className="level-progress-track"
@@ -247,6 +270,10 @@ export default function Home() {
             aria-valuenow={levelProgress.progressPercent}
           >
             <span className="level-progress-fill" style={{ transform: `scaleX(${levelProgress.progressPercent / 100})` }} />
+            <span className="level-progress-value">
+              {levelProgress.currentLevelExperience.toLocaleString("vi-VN")} / {levelProgress.experienceForNextLevel.toLocaleString("vi-VN")} XP
+            </span>
+            {xpGainKey > 0 && <span key={xpGainKey} className="xp-gain-pop" aria-hidden="true">+1 XP</span>}
           </div>
           <p className="level-progress-caption">
             Còn {levelProgress.experienceRemaining.toLocaleString("vi-VN")} XP lên cấp {(levelProgress.level + BigInt(1)).toString()}
@@ -256,7 +283,7 @@ export default function Home() {
           <span className="counter-spark" aria-hidden="true">✳</span>
           {!playerToken
             ? "nhập tên, rồi bấm mì để lên BXH"
-            : `lượt này: ${clicksThisVisit} · ${activeBoardLabel}: ${myScore} lần bấm`}
+            : `Tổng: ${totalClicks.toLocaleString("vi-VN")} lần bấm`}
         </div>
         {notice && <p className="action-notice" role="status">{notice}</p>}
 
