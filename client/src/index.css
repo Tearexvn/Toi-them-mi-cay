@@ -419,6 +419,12 @@ button { font: inherit; }
 .achievement-dialog-icon { display: grid; width: 54px; height: 54px; place-items: center; border: 1px solid rgba(174, 103, 58, .18); border-radius: 18px; background: rgba(255, 255, 255, .62); font-size: 27px; box-shadow: 0 7px 20px rgba(83, 56, 33, .07); }
 .achievement-dialog-title { margin: 3px 0 0; color: #43271d; font-family: "Bricolage Grotesque", sans-serif; font-size: 25px; font-weight: 800; letter-spacing: -.045em; }
 .achievement-dialog-description { max-width: 330px; color: #927965; font-size: 12px; line-height: 1.6; }
+.achievement-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin-bottom: 12px; padding: 4px; border: 1px solid rgba(150, 99, 60, .15); border-radius: 14px; background: rgba(117, 71, 39, .06); }
+.achievement-tab { min-height: 37px; border: 0; border-radius: 10px; background: transparent; color: #856b56; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; transition: color 160ms ease, background 160ms ease, box-shadow 160ms ease; }
+.achievement-tab:hover { color: #6f3a27; }
+.achievement-tab.is-active { background: rgba(255, 251, 241, .96); color: #a83d22; box-shadow: 0 2px 8px rgba(83, 56, 33, .1); }
+.achievement-tab:focus-visible, .achievement-panel:focus-visible { outline: 3px solid #3f261d; outline-offset: 2px; }
+.achievement-panel { min-height: 124px; }
 .achievement-empty-state { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 2px; border: 1px dashed rgba(150, 99, 60, .28); border-radius: 18px; padding: 25px 20px; background: rgba(255, 255, 255, .42); text-align: center; }
 .achievement-empty-illustration { font-size: 34px; filter: drop-shadow(0 4px 5px rgba(100, 56, 28, .1)); }
 .achievement-empty-state h3 { margin: 0; color: #533428; font-family: "Bricolage Grotesque", sans-serif; font-size: 16px; font-weight: 800; }

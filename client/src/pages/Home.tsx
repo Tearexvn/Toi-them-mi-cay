@@ -10,7 +10,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  getAchievementPanelState,
   getSecretHoldProgress,
   getUnlockedAchievements,
   isSecretHoldComplete,
@@ -28,6 +27,7 @@ import {
 
 type Mood = "beef" | "chicken" | "octopus";
 type Board = LeaderboardBoard;
+type AchievementTab = "achievements" | "special";
 type ParticleStyle = CSSProperties & {
   "--dx": string;
   "--dy": string;
@@ -136,6 +136,7 @@ export default function Home() {
   const [achievementFireworks, setAchievementFireworks] = useState<ReturnType<typeof createAchievementFireworks>>([]);
   const [xpGainPops, setXpGainPops] = useState<ReturnType<typeof createXpGainPop>[]>([]);
   const [achievementDialogOpen, setAchievementDialogOpen] = useState(false);
+  const [activeAchievementTab, setActiveAchievementTab] = useState<AchievementTab>("achievements");
   const [achievementToastOpen, setAchievementToastOpen] = useState(false);
   const [burnedFingerUnlockedLocal, setBurnedFingerUnlockedLocal] = useState(false);
   const [isHoldingNoodle, setIsHoldingNoodle] = useState(false);
@@ -257,10 +258,17 @@ export default function Home() {
     : maxNoodleExperience(serverExperience, optimisticExperience);
   const levelProgress = useMemo(() => getNoodleLevelProgress(experience), [experience]);
   const burnedFingerUnlocked = burnedFingerUnlockedLocal || Boolean(leaderboard.data?.player?.burnedFingerUnlocked);
-  const unlockedAchievements = useMemo(
-    () => [...NOODLE_ACHIEVEMENTS, ...getUnlockedAchievements(burnedFingerUnlocked)],
+  const specialAchievements = useMemo(
+    () => getUnlockedAchievements(burnedFingerUnlocked),
     [burnedFingerUnlocked],
   );
+  const unlockedAchievements = useMemo(
+    () => [...NOODLE_ACHIEVEMENTS, ...specialAchievements],
+    [specialAchievements],
+  );
+  const visibleAchievements = activeAchievementTab === "achievements"
+    ? NOODLE_ACHIEVEMENTS
+    : specialAchievements;
 
   function completeBurnerHold() {
     if (holdTriggeredRef.current || !playerToken || burnedFingerUnlocked) return;
@@ -574,25 +582,79 @@ export default function Home() {
                 Một góc nhỏ để khoe những lần thèm mì đáng nhớ.
               </DialogDescription>
             </DialogHeader>
-            {getAchievementPanelState(unlockedAchievements) === "empty" ? (
-              <section className="achievement-empty-state" aria-live="polite">
-                <span className="achievement-empty-illustration" aria-hidden="true">🍜✨</span>
-                <h3>Chưa có thành tựu nào</h3>
-                <span className="achievement-coming-soon">ĐANG ĐƯỢC NẤU</span>
-              </section>
-            ) : (
-              <div className="achievement-list" role="list">
-                {unlockedAchievements.map((achievement) => (
-                  <article className="achievement-item" key={achievement.id} role="listitem">
-                    <span aria-hidden="true">{achievement.icon}</span>
-                    <div>
-                      <h3>{achievement.title}</h3>
-                      <p>{achievement.description}</p>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
+            <div className="achievement-tabs" role="tablist" aria-label="Chọn trang thành tựu">
+              <button
+                id="achievement-tab-achievements"
+                className={`achievement-tab ${activeAchievementTab === "achievements" ? "is-active" : ""}`}
+                type="button"
+                role="tab"
+                aria-selected={activeAchievementTab === "achievements"}
+                aria-controls="achievement-panel"
+                tabIndex={activeAchievementTab === "achievements" ? 0 : -1}
+                onClick={() => setActiveAchievementTab("achievements")}
+                onKeyDown={(event) => {
+                  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                  event.preventDefault();
+                  setActiveAchievementTab("special");
+                  document.getElementById("achievement-tab-special")?.focus();
+                }}
+              >
+                Thành tựu
+              </button>
+              <button
+                id="achievement-tab-special"
+                className={`achievement-tab ${activeAchievementTab === "special" ? "is-active" : ""}`}
+                type="button"
+                role="tab"
+                aria-selected={activeAchievementTab === "special"}
+                aria-controls="achievement-panel"
+                tabIndex={activeAchievementTab === "special" ? 0 : -1}
+                onClick={() => setActiveAchievementTab("special")}
+                onKeyDown={(event) => {
+                  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                  event.preventDefault();
+                  setActiveAchievementTab("achievements");
+                  document.getElementById("achievement-tab-achievements")?.focus();
+                }}
+              >
+                Đặc biệt
+              </button>
+            </div>
+            <div
+              id="achievement-panel"
+              className="achievement-panel"
+              role="tabpanel"
+              aria-labelledby={`achievement-tab-${activeAchievementTab}`}
+              tabIndex={0}
+            >
+              {visibleAchievements.length === 0 ? (
+                <section className="achievement-empty-state" aria-live="polite">
+                  <span className="achievement-empty-illustration" aria-hidden="true">
+                    {activeAchievementTab === "achievements" ? "🍜✨" : "✨"}
+                  </span>
+                  <h3>
+                    {activeAchievementTab === "achievements"
+                      ? "Chưa có thành tựu nào"
+                      : "Chưa mở khóa thành tựu đặc biệt nào"}
+                  </h3>
+                  <span className="achievement-coming-soon">
+                    {activeAchievementTab === "achievements" ? "ĐANG ĐƯỢC NẤU" : "ĐANG ĐƯỢC GIẤU KÍN"}
+                  </span>
+                </section>
+              ) : (
+                <div className="achievement-list" role="list">
+                  {visibleAchievements.map((achievement) => (
+                    <article className="achievement-item" key={achievement.id} role="listitem">
+                      <span aria-hidden="true">{achievement.icon}</span>
+                      <div>
+                        <h3>{achievement.title}</h3>
+                        <p>{achievement.description}</p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
 
