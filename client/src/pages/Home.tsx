@@ -563,7 +563,7 @@ export default function Home() {
             <button className="achievement-launch" type="button" aria-haspopup="dialog">
               <span aria-hidden="true">🏆</span>
               <span>Thành tựu</span>
-              <span className="achievement-launch-tag">{burnedFingerUnlocked ? "đã mở khóa" : "sắp có"}</span>
+              <span className="achievement-launch-tag" aria-label={`${unlockedAchievements.length} thành tựu đã nhận`}>{unlockedAchievements.length}</span>
             </button>
           </DialogTrigger>
           <DialogContent className="achievement-dialog">
@@ -578,7 +578,6 @@ export default function Home() {
               <section className="achievement-empty-state" aria-live="polite">
                 <span className="achievement-empty-illustration" aria-hidden="true">🍜✨</span>
                 <h3>Chưa có thành tựu nào</h3>
-                <p>Thành tựu sẽ được thêm sau nhé. Tạm thời cứ bấm mì cho vui đã!</p>
                 <span className="achievement-coming-soon">ĐANG ĐƯỢC NẤU</span>
               </section>
             ) : (
