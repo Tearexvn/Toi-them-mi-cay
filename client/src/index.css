@@ -203,12 +203,20 @@ button { font: inherit; }
   min-height: 100svh;
   flex-direction: column;
   overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
   color: #38231c;
   background:
     radial-gradient(ellipse at 78% 20%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 34%),
     radial-gradient(ellipse at 8% 84%, rgba(232, 177, 106, .16), transparent 28%),
     var(--wash);
   transition: background-color 420ms ease, color 220ms ease;
+}
+.site-shell input,
+.site-shell textarea,
+.site-shell [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
 }
 .site-shell[data-theme="chicken"] { --accent: #bd692a; --accent-deep: #894316; --wash: #f8edda; --wash-soft: #fff8e9; }
 .site-shell[data-theme="octopus"] { --accent: #8e5266; --accent-deep: #653348; --wash: #f3e9e5; --wash-soft: #fff6f2; }
