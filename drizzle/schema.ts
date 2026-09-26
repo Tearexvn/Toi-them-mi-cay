@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, longtext, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing the optional Manus OAuth flow.
@@ -25,6 +25,7 @@ export const noodlePlayers = mysqlTable("noodle_players", {
   nameKey: varchar("nameKey", { length: 96 }).notNull().unique(),
   loginTokenHash: varchar("loginTokenHash", { length: 64 }).notNull().unique(),
   totalClicks: int("totalClicks", { unsigned: true }).default(0).notNull(),
+  experience: longtext("experience").notNull(),
   beefClicks: int("beefClicks", { unsigned: true }).default(0).notNull(),
   chickenClicks: int("chickenClicks", { unsigned: true }).default(0).notNull(),
   octopusClicks: int("octopusClicks", { unsigned: true }).default(0).notNull(),

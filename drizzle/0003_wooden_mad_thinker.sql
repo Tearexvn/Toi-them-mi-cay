@@ -1,0 +1,1 @@
+ALTER TABLE `noodle_players` MODIFY COLUMN `experience` longtext NOT NULL;

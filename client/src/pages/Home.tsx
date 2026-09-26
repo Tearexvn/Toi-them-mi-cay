@@ -1,5 +1,6 @@
 import { useMemo, useState, type CSSProperties, type FormEvent } from "react";
 import { trpc } from "@/lib/trpc";
+import { getNoodleLevelProgress } from "@shared/noodle-level";
 
 type Mood = "beef" | "chicken" | "octopus";
 type Board = Mood | "total";
@@ -98,6 +99,9 @@ export default function Home() {
     : 0;
   const myScore = Math.max(leaderboard.data?.me?.score ?? 0, lastRecordedScore);
   const activeBoardLabel = boards.find((board) => board.id === activeBoard)?.label ?? "Tổng";
+  const lastRecordedExperience = recordClick.variables?.token === playerToken ? recordClick.data?.experience : undefined;
+  const experience = lastRecordedExperience ?? leaderboard.data?.player?.experience ?? "0";
+  const levelProgress = useMemo(() => getNoodleLevelProgress(experience), [experience]);
 
   function makeItRain() {
     if (!playerToken) {
@@ -226,6 +230,27 @@ export default function Home() {
             <span>mì cay</span>
             <span className="button-spark" aria-hidden="true">✳</span>
           </button>
+        </div>
+        <div className="level-progress" aria-label="Tiến độ cấp mì cay">
+          <div className="level-progress-heading">
+            <strong className="level-name">🍜 mì cay cấp {levelProgress.level.toString()}</strong>
+            <span className="level-xp-count">
+              {levelProgress.currentLevelExperience.toLocaleString("vi-VN")} / {levelProgress.experienceForNextLevel.toLocaleString("vi-VN")} XP
+            </span>
+          </div>
+          <div
+            className="level-progress-track"
+            role="progressbar"
+            aria-label={`XP để lên cấp ${levelProgress.level.toString()}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={levelProgress.progressPercent}
+          >
+            <span className="level-progress-fill" style={{ transform: `scaleX(${levelProgress.progressPercent / 100})` }} />
+          </div>
+          <p className="level-progress-caption">
+            Còn {levelProgress.experienceRemaining.toLocaleString("vi-VN")} XP lên cấp {(levelProgress.level + BigInt(1)).toString()}
+          </p>
         </div>
         <div className="tiny-counter" aria-live="polite">
           <span className="counter-spark" aria-hidden="true">✳</span>

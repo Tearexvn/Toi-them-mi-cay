@@ -15,6 +15,20 @@
       "when": 1790398458617,
       "tag": "0001_exotic_sinister_six",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1790408885145,
+      "tag": "0002_glossy_vapor",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1790409183929,
+      "tag": "0003_wooden_mad_thinker",
+      "breakpoints": true
     }
   ]
 }

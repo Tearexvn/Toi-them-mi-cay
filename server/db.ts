@@ -143,6 +143,7 @@ export async function joinNoodlePlayer(name: string, existingToken?: string) {
       nameKey,
       loginTokenHash: hashToken(token),
       totalClicks: 0,
+      experience: "0",
       beefClicks: 0,
       chickenClicks: 0,
       octopusClicks: 0,
@@ -188,14 +189,25 @@ export async function getNoodleLeaderboard(token?: string, board: NoodleBoard = 
     .limit(10);
 
   let me: { playerId: number; name: string; score: number; rank: number } | null = null;
+  let playerProgress: { playerId: number; name: string; totalClicks: number; experience: string } | null = null;
   if (token) {
     const tokenHash = hashToken(token);
     const playerRows = await db.select({
       playerId: noodlePlayers.id,
       name: noodlePlayers.displayName,
       score: scoreColumn,
+      totalClicks: noodlePlayers.totalClicks,
+      experience: noodlePlayers.experience,
     }).from(noodlePlayers).where(eq(noodlePlayers.loginTokenHash, tokenHash)).limit(1);
     const player = playerRows[0];
+    if (player) {
+      playerProgress = {
+        playerId: player.playerId,
+        name: player.name,
+        totalClicks: player.totalClicks,
+        experience: player.experience,
+      };
+    }
     if (player && (board === "total" || player.score > 0)) {
       const ahead = await db.select({ value: count() }).from(noodlePlayers)
         .where(gt(scoreColumn, player.score));
@@ -210,33 +222,37 @@ export async function getNoodleLeaderboard(token?: string, board: NoodleBoard = 
     }
   }
 
-  return { top, me };
+  return { top, me, player: playerProgress };
 }
 
 export async function recordNoodleClick(token: string, mood: NoodleMood): Promise<NoodlePlayer | null> {
   const db = await requireNoodleDb();
   const tokenHash = hashToken(token);
-  const playerRows = await db.select({ id: noodlePlayers.id }).from(noodlePlayers)
-    .where(eq(noodlePlayers.loginTokenHash, tokenHash)).limit(1);
-  const player = playerRows[0];
-  if (!player) return null;
+  return db.transaction(async (tx) => {
+    const playerRows = await tx.select({ id: noodlePlayers.id, experience: noodlePlayers.experience })
+      .from(noodlePlayers).where(eq(noodlePlayers.loginTokenHash, tokenHash)).limit(1).for("update");
+    const player = playerRows[0];
+    if (!player) return null;
 
-  const totalClicks = sql`${noodlePlayers.totalClicks} + 1`;
-  switch (mood) {
-    case "beef":
-      await db.update(noodlePlayers).set({ totalClicks, beefClicks: sql`${noodlePlayers.beefClicks} + 1` })
-        .where(eq(noodlePlayers.id, player.id));
-      break;
-    case "chicken":
-      await db.update(noodlePlayers).set({ totalClicks, chickenClicks: sql`${noodlePlayers.chickenClicks} + 1` })
-        .where(eq(noodlePlayers.id, player.id));
-      break;
-    case "octopus":
-      await db.update(noodlePlayers).set({ totalClicks, octopusClicks: sql`${noodlePlayers.octopusClicks} + 1` })
-        .where(eq(noodlePlayers.id, player.id));
-      break;
-  }
+    const totalClicks = sql`${noodlePlayers.totalClicks} + 1`;
+    const experience = (BigInt(player.experience || "0") + BigInt(1)).toString();
+    const clickUpdate = { totalClicks, experience };
+    switch (mood) {
+      case "beef":
+        await tx.update(noodlePlayers).set({ ...clickUpdate, beefClicks: sql`${noodlePlayers.beefClicks} + 1` })
+          .where(eq(noodlePlayers.id, player.id));
+        break;
+      case "chicken":
+        await tx.update(noodlePlayers).set({ ...clickUpdate, chickenClicks: sql`${noodlePlayers.chickenClicks} + 1` })
+          .where(eq(noodlePlayers.id, player.id));
+        break;
+      case "octopus":
+        await tx.update(noodlePlayers).set({ ...clickUpdate, octopusClicks: sql`${noodlePlayers.octopusClicks} + 1` })
+          .where(eq(noodlePlayers.id, player.id));
+        break;
+    }
 
-  const updated = await db.select().from(noodlePlayers).where(eq(noodlePlayers.id, player.id)).limit(1);
-  return updated[0] ?? null;
+    const updated = await tx.select().from(noodlePlayers).where(eq(noodlePlayers.id, player.id)).limit(1);
+    return updated[0] ?? null;
+  });
 }

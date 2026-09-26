@@ -73,6 +73,7 @@ export const appRouter = router({
           if (!player) throw new TRPCError({ code: "UNAUTHORIZED", message: "Phiên chơi không còn hợp lệ. Hãy nhập lại tên nhé." });
           return {
             totalClicks: player.totalClicks,
+            experience: player.experience,
             beefClicks: player.beefClicks,
             chickenClicks: player.chickenClicks,
             octopusClicks: player.octopusClicks,
