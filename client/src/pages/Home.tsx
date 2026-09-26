@@ -70,7 +70,8 @@ export default function Home() {
   });
 
   const activeMood = moods.find((item) => item.id === mood) ?? moods[0];
-  const myScore = leaderboard.data?.me?.totalClicks ?? 0;
+  const lastRecordedScore = recordClick.variables?.token === playerToken ? recordClick.data?.totalClicks ?? 0 : 0;
+  const myScore = Math.max(leaderboard.data?.me?.totalClicks ?? 0, lastRecordedScore);
 
   function makeItRain() {
     if (!playerToken) {
