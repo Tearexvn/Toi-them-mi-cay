@@ -398,3 +398,30 @@ button { font: inherit; }
 .level-up-rain { position: fixed; z-index: 20; inset: 0; overflow: hidden; pointer-events: none; }
 .fire-drop { position: absolute; display: block; opacity: 0; line-height: 1; filter: drop-shadow(0 3px 5px rgba(114, 43, 20, .17)); will-change: transform, opacity; animation: fire-rain-fall var(--fire-duration) linear forwards; pointer-events: none; }
 @keyframes fire-rain-fall { 0% { opacity: 0; transform: translate3d(0, -6vh, 0) rotate(-12deg) scale(.76); } 12% { opacity: 1; } 88% { opacity: .95; } 100% { opacity: 0; transform: translate3d(var(--fire-drift), 112vh, 0) rotate(560deg) scale(1.08); } }
+
+.achievement-launch { display: inline-flex; align-items: center; justify-content: center; gap: 8px; margin: 14px auto 0; border: 1px solid rgba(137, 81, 45, .2); border-radius: 999px; padding: 9px 13px; background: rgba(255, 251, 241, .78); color: #6f4934; font: inherit; font-size: 11px; font-weight: 800; box-shadow: 0 5px 15px rgba(83, 56, 33, .06); cursor: pointer; transition: transform 160ms cubic-bezier(.23,1,.32,1), border-color 160ms ease, background 160ms ease, box-shadow 160ms ease; }
+.achievement-launch:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 38%, transparent); background: #fff9ed; box-shadow: 0 8px 18px rgba(83, 56, 33, .1); }
+.achievement-launch:active { transform: scale(.97); }
+.achievement-launch:focus-visible { outline: 3px solid #3f261d; outline-offset: 3px; }
+.achievement-launch-tag { border-radius: 999px; padding: 3px 6px; background: color-mix(in srgb, var(--accent) 10%, white); color: var(--accent-deep); font-size: 8px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+.achievement-dialog { max-height: min(80vh, 640px); overflow-y: auto; border-color: rgba(104, 68, 43, .17); border-radius: 24px; padding: 25px; background: linear-gradient(145deg, #fffaf0, #fff5e5); color: #44291f; box-shadow: 0 24px 80px rgba(58, 35, 22, .24); }
+.achievement-dialog-header { align-items: center; text-align: center; }
+.achievement-dialog-icon { display: grid; width: 54px; height: 54px; place-items: center; border: 1px solid rgba(174, 103, 58, .18); border-radius: 18px; background: rgba(255, 255, 255, .62); font-size: 27px; box-shadow: 0 7px 20px rgba(83, 56, 33, .07); }
+.achievement-dialog-title { margin: 3px 0 0; color: #43271d; font-family: "Bricolage Grotesque", sans-serif; font-size: 25px; font-weight: 800; letter-spacing: -.045em; }
+.achievement-dialog-description { max-width: 330px; color: #927965; font-size: 12px; line-height: 1.6; }
+.achievement-empty-state { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 2px; border: 1px dashed rgba(150, 99, 60, .28); border-radius: 18px; padding: 25px 20px; background: rgba(255, 255, 255, .42); text-align: center; }
+.achievement-empty-illustration { font-size: 34px; filter: drop-shadow(0 4px 5px rgba(100, 56, 28, .1)); }
+.achievement-empty-state h3 { margin: 0; color: #533428; font-family: "Bricolage Grotesque", sans-serif; font-size: 16px; font-weight: 800; }
+.achievement-empty-state p { max-width: 290px; margin: 0; color: #967d6a; font-size: 11px; line-height: 1.7; }
+.achievement-coming-soon { margin-top: 2px; border-radius: 999px; padding: 6px 9px; background: rgba(223, 122, 67, .1); color: #ae5530; font-size: 8px; font-weight: 900; letter-spacing: .14em; }
+.achievement-list { display: grid; gap: 8px; }
+.achievement-item { display: flex; align-items: center; gap: 12px; border: 1px solid rgba(104, 68, 43, .1); border-radius: 14px; padding: 12px; background: rgba(255, 255, 255, .5); }
+.achievement-item > span { font-size: 23px; }
+.achievement-item h3, .achievement-item p { margin: 0; }
+.achievement-item h3 { color: #533428; font-size: 12px; font-weight: 800; }
+.achievement-item p { margin-top: 3px; color: #947c68; font-size: 10px; line-height: 1.5; }
+@media (max-width: 540px) {
+  .achievement-dialog { padding: 22px 18px; }
+  .achievement-dialog-title { font-size: 22px; }
+  .achievement-empty-state { padding: 21px 15px; }
+}

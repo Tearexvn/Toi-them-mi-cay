@@ -1,6 +1,15 @@
 import { useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { trpc } from "@/lib/trpc";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { getAchievementPanelState, NOODLE_ACHIEVEMENTS } from "@shared/noodle-achievements";
+import {
   addNoodleExperience,
   didNoodleLevelUp,
   getNoodleLevelProgress,
@@ -86,6 +95,7 @@ export default function Home() {
   const [particles, setParticles] = useState<{ id: number; style: ParticleStyle }[]>([]);
   const [fireDrops, setFireDrops] = useState<ReturnType<typeof createFireDrops>>([]);
   const [xpGainPops, setXpGainPops] = useState<ReturnType<typeof createXpGainPop>[]>([]);
+  const [achievementDialogOpen, setAchievementDialogOpen] = useState(false);
   const [optimisticExperience, setOptimisticExperience] = useState<string | null>(null);
   const optimisticExperienceRef = useRef<string | null>(null);
   const [playerToken, setPlayerToken] = useState(() => readSession(TOKEN_KEY));
@@ -341,6 +351,45 @@ export default function Home() {
             : `Tổng: ${totalClicks.toLocaleString("vi-VN")} lần bấm`}
         </div>
         {notice && <p className="action-notice" role="status">{notice}</p>}
+
+        <Dialog open={achievementDialogOpen} onOpenChange={setAchievementDialogOpen}>
+          <DialogTrigger asChild>
+            <button className="achievement-launch" type="button" aria-haspopup="dialog">
+              <span aria-hidden="true">🏆</span>
+              <span>Thành tựu</span>
+              <span className="achievement-launch-tag">sắp có</span>
+            </button>
+          </DialogTrigger>
+          <DialogContent className="achievement-dialog">
+            <DialogHeader className="achievement-dialog-header">
+              <span className="achievement-dialog-icon" aria-hidden="true">🏆</span>
+              <DialogTitle className="achievement-dialog-title">Bảng thành tựu</DialogTitle>
+              <DialogDescription className="achievement-dialog-description">
+                Một góc nhỏ để khoe những lần thèm mì đáng nhớ.
+              </DialogDescription>
+            </DialogHeader>
+            {getAchievementPanelState(NOODLE_ACHIEVEMENTS) === "empty" ? (
+              <section className="achievement-empty-state" aria-live="polite">
+                <span className="achievement-empty-illustration" aria-hidden="true">🍜✨</span>
+                <h3>Chưa có thành tựu nào</h3>
+                <p>Thành tựu sẽ được thêm sau nhé. Tạm thời cứ bấm mì cho vui đã!</p>
+                <span className="achievement-coming-soon">ĐANG ĐƯỢC NẤU</span>
+              </section>
+            ) : (
+              <div className="achievement-list" role="list">
+                {NOODLE_ACHIEVEMENTS.map((achievement) => (
+                  <article className="achievement-item" key={achievement.id} role="listitem">
+                    <span aria-hidden="true">{achievement.icon}</span>
+                    <div>
+                      <h3>{achievement.title}</h3>
+                      <p>{achievement.description}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
         <div className="mood-picker" aria-label="Chọn vị mì cay">
           <p className="picker-label">hôm nay thèm vị nào?</p>
