@@ -1,7 +1,8 @@
-import { FormEvent, useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties, type FormEvent } from "react";
 import { trpc } from "@/lib/trpc";
 
 type Mood = "beef" | "chicken" | "octopus";
+type Board = Mood | "total";
 type ParticleStyle = CSSProperties & {
   "--dx": string;
   "--dy": string;
@@ -14,6 +15,20 @@ const moods: { id: Mood; label: string; emoji: string; note: string }[] = [
   { id: "chicken", label: "Đùi gà", emoji: "🍗", note: "GÀ GIÒN TAN" },
   { id: "octopus", label: "Bạch tuộc", emoji: "🐙", note: "BẠCH TUỘC GIÒN SỰT" },
 ];
+
+const boards: { id: Board; label: string; emoji: string }[] = [
+  { id: "total", label: "Tổng", emoji: "🏆" },
+  { id: "beef", label: "Mì bò", emoji: "🥩" },
+  { id: "chicken", label: "Mì đùi gà", emoji: "🍗" },
+  { id: "octopus", label: "Mì bạch tuộc", emoji: "🐙" },
+];
+
+const scoreFields = {
+  total: "totalClicks",
+  beef: "beefClicks",
+  chicken: "chickenClicks",
+  octopus: "octopusClicks",
+} as const;
 
 const TOKEN_KEY = "mi-cay-player-token";
 const NAME_KEY = "mi-cay-player-name";
@@ -35,6 +50,7 @@ function medalFor(rank: number) {
 
 export default function Home() {
   const [mood, setMood] = useState<Mood>("beef");
+  const [activeBoard, setActiveBoard] = useState<Board>("total");
   const [particles, setParticles] = useState<{ id: number; style: ParticleStyle }[]>([]);
   const [clicksThisVisit, setClicksThisVisit] = useState(0);
   const [playerToken, setPlayerToken] = useState(() => readSession(TOKEN_KEY));
@@ -43,8 +59,12 @@ export default function Home() {
   const [notice, setNotice] = useState("");
 
   const utils = trpc.useUtils();
+  const leaderboardInput = useMemo(
+    () => ({ token: playerToken || undefined, board: activeBoard }),
+    [playerToken, activeBoard],
+  );
   const leaderboard = trpc.noodle.leaderboard.useQuery(
-    { token: playerToken || undefined },
+    leaderboardInput,
     { refetchInterval: 10_000, refetchOnWindowFocus: true, retry: 1 },
   );
   const joinPlayer = trpc.noodle.join.useMutation({
@@ -58,7 +78,9 @@ export default function Home() {
       setPlayerToken(session.token);
       setPlayerName(session.name);
       setDraftName("");
-      setNotice(`Chào ${session.name}! Bấm mì là lên bảng.`);
+      setNotice(session.returning
+        ? `Chào ${session.name}! Đã vào lại hồ sơ, điểm cũ còn nguyên.`
+        : `Chào ${session.name}! Bấm mì là lên bảng.`);
       void utils.noodle.leaderboard.invalidate();
     },
   });
@@ -70,8 +92,12 @@ export default function Home() {
   });
 
   const activeMood = moods.find((item) => item.id === mood) ?? moods[0];
-  const lastRecordedScore = recordClick.variables?.token === playerToken ? recordClick.data?.totalClicks ?? 0 : 0;
-  const myScore = Math.max(leaderboard.data?.me?.totalClicks ?? 0, lastRecordedScore);
+  const scoreField = scoreFields[activeBoard];
+  const lastRecordedScore = recordClick.variables?.token === playerToken
+    ? recordClick.data?.[scoreField] ?? 0
+    : 0;
+  const myScore = Math.max(leaderboard.data?.me?.score ?? 0, lastRecordedScore);
+  const activeBoardLabel = boards.find((board) => board.id === activeBoard)?.label ?? "Tổng";
 
   function makeItRain() {
     if (!playerToken) {
@@ -103,7 +129,7 @@ export default function Home() {
     setParticles((current) => [...current.slice(-28), ...newParticles]);
     setClicksThisVisit((current) => current + 1);
     setNotice("");
-    recordClick.mutate({ token: playerToken });
+    recordClick.mutate({ token: playerToken, mood });
     window.setTimeout(() => {
       setParticles((current) => current.filter((particle) => !newParticles.some((created) => created.id === particle.id)));
     }, 1600);
@@ -117,7 +143,7 @@ export default function Home() {
       return;
     }
     setNotice("");
-    joinPlayer.mutate({ name });
+    joinPlayer.mutate({ name, token: playerToken || undefined });
   }
 
   function leavePlayer() {
@@ -159,7 +185,7 @@ export default function Home() {
 
         {!playerName ? (
           <form className="join-form" onSubmit={handleJoin}>
-            <label className="join-label" htmlFor="player-name">Nhập tên để ghi danh lên BXH</label>
+            <label className="join-label" htmlFor="player-name">Nhập tên để ghi danh hoặc vào lại</label>
             <div className="join-controls">
               <input
                 id="player-name"
@@ -178,7 +204,7 @@ export default function Home() {
               </button>
             </div>
             <p id="join-message" className={`join-hint ${nameError ? "is-error" : ""}`} aria-live="polite">
-              {nameError || "Chỉ cần tên thôi — không mật khẩu, không phiền phức."}
+              {nameError || "Nhập tên cũ để giữ điểm · không cần mật khẩu."}
             </p>
           </form>
         ) : (
@@ -205,7 +231,7 @@ export default function Home() {
           <span className="counter-spark" aria-hidden="true">✳</span>
           {!playerToken
             ? "nhập tên, rồi bấm mì để lên BXH"
-            : `lượt này: ${clicksThisVisit} · tổng cộng: ${myScore} lần bấm`}
+            : `lượt này: ${clicksThisVisit} · ${activeBoardLabel}: ${myScore} lần bấm`}
         </div>
         {notice && <p className="action-notice" role="status">{notice}</p>}
 
@@ -237,6 +263,21 @@ export default function Home() {
             </div>
             <span className="live-tag"><span className="live-dot" /> cập nhật liên tục</span>
           </div>
+          <div className="leaderboard-tabs" role="tablist" aria-label="Chọn bảng xếp hạng">
+            {boards.map((board) => (
+              <button
+                key={board.id}
+                type="button"
+                role="tab"
+                aria-selected={activeBoard === board.id}
+                className={`leaderboard-tab ${activeBoard === board.id ? "is-active" : ""}`}
+                onClick={() => setActiveBoard(board.id)}
+              >
+                <span aria-hidden="true">{board.emoji}</span>
+                <span>{board.label}</span>
+              </button>
+            ))}
+          </div>
           {leaderboardError ? (
             <div className="leaderboard-empty" role="status">
               <span aria-hidden="true">🍜</span>
@@ -248,10 +289,10 @@ export default function Home() {
           ) : !leaderboard.data?.top.length ? (
             <div className="leaderboard-empty">
               <span aria-hidden="true">🍜</span>
-              <p>Chưa ai ghi danh cả. Mở hàng đi nào!</p>
+              <p>{activeBoard === "total" ? "Chưa ai ghi danh cả. Mở hàng đi nào!" : "Chưa ai bấm vị này cả. Mở hàng đi nào!"}</p>
             </div>
           ) : (
-            <ol className="leaderboard-list">
+            <ol className="leaderboard-list" role="tabpanel" aria-label={`BXH ${activeBoardLabel}`}>
               {leaderboard.data.top.map((entry, index) => {
                 const rank = index + 1;
                 const isMe = entry.playerId === leaderboard.data?.me?.playerId;
@@ -260,7 +301,7 @@ export default function Home() {
                     <span className="rank-number" aria-label={`Hạng ${rank}`}>{medalFor(rank)}</span>
                     <span className="rank-avatar" aria-hidden="true">{rank === 1 ? "👑" : "🍜"}</span>
                     <span className="rank-name">{entry.name}{isMe && <span className="you-tag">BẠN</span>}</span>
-                    <span className="rank-score">{entry.totalClicks.toLocaleString("vi-VN")} <small>lần bấm</small></span>
+                    <span className="rank-score">{entry.score.toLocaleString("vi-VN")} <small>lần bấm</small></span>
                   </li>
                 );
               })}
@@ -269,12 +310,12 @@ export default function Home() {
                   <span className="rank-number">{leaderboard.data.me.rank}</span>
                   <span className="rank-avatar" aria-hidden="true">🍜</span>
                   <span className="rank-name">{leaderboard.data.me.name}<span className="you-tag">BẠN</span></span>
-                  <span className="rank-score">{leaderboard.data.me.totalClicks.toLocaleString("vi-VN")} <small>lần bấm</small></span>
+                  <span className="rank-score">{leaderboard.data.me.score.toLocaleString("vi-VN")} <small>lần bấm</small></span>
                 </li>
               )}
             </ol>
           )}
-          <div className="leaderboard-footnote"><span>🏆</span> Mỗi lần bấm mì cay = thêm 1 điểm thèm mì.</div>
+          <div className="leaderboard-footnote"><span>🏆</span> Mỗi lần bấm mì cay = 1 điểm ở vị đã chọn và 1 điểm tổng.</div>
         </div>
       </section>
 

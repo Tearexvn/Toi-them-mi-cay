@@ -366,3 +366,14 @@ button { font: inherit; }
   .rank-score small { font-size: 8px; }
   .leaderboard-footnote { font-size: 9px; }
 }
+
+
+.leaderboard-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; margin: 0 14px; padding: 12px 0; border-bottom: 1px solid rgba(104, 68, 43, .09); }
+.leaderboard-tab { display: flex; min-width: 0; min-height: 41px; align-items: center; justify-content: center; gap: 6px; border: 1px solid transparent; border-radius: 11px; padding: 7px 6px; background: transparent; color: #806a59; font: inherit; font-size: 10px; font-weight: 750; transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms cubic-bezier(.23,1,.32,1); }
+.leaderboard-tab:hover { transform: translateY(-1px); background: rgba(255,255,255,.52); }
+.leaderboard-tab.is-active { border-color: color-mix(in srgb, var(--accent) 25%, transparent); background: color-mix(in srgb, var(--accent) 9%, #fffaf0); color: var(--accent-deep); }
+.leaderboard-tab:focus-visible { outline: 3px solid #3f261d; outline-offset: 2px; }
+@media (max-width: 700px) {
+  .leaderboard-tabs { gap: 3px; margin: 0 8px; padding: 10px 0; }
+  .leaderboard-tab { flex-direction: column; gap: 3px; min-height: 48px; padding: 5px 3px; font-size: 9px; line-height: 1.1; }
+}

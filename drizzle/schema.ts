@@ -25,6 +25,9 @@ export const noodlePlayers = mysqlTable("noodle_players", {
   nameKey: varchar("nameKey", { length: 96 }).notNull().unique(),
   loginTokenHash: varchar("loginTokenHash", { length: 64 }).notNull().unique(),
   totalClicks: int("totalClicks", { unsigned: true }).default(0).notNull(),
+  beefClicks: int("beefClicks", { unsigned: true }).default(0).notNull(),
+  chickenClicks: int("chickenClicks", { unsigned: true }).default(0).notNull(),
+  octopusClicks: int("octopusClicks", { unsigned: true }).default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

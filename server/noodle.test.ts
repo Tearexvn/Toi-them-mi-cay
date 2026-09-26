@@ -42,6 +42,16 @@ describe("noodle player names", () => {
 
   it("rejects short click tokens before querying the database", async () => {
     const caller = createPublicCaller();
-    await expectBadRequest(() => caller.noodle.click({ token: "short" }));
+    await expectBadRequest(() => caller.noodle.click({ token: "short", mood: "beef" }));
+  });
+
+  it("rejects unsupported topping values", async () => {
+    const caller = createPublicCaller();
+    await expectBadRequest(() => caller.noodle.click({ token: "a".repeat(32), mood: "pizza" as never }));
+  });
+
+  it("rejects unsupported leaderboard names before querying the database", async () => {
+    const caller = createPublicCaller();
+    await expectBadRequest(() => caller.noodle.leaderboard({ board: "dessert" as never }));
   });
 });

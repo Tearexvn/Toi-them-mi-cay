@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { asc, count, desc, eq, gt, and, lt, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, lt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, noodlePlayers, NoodlePlayer, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -20,10 +20,7 @@ export async function getDb() {
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) {
-    throw new Error("User openId is required for upsert");
-  }
-
+  if (!user.openId) throw new Error("User openId is required for upsert");
   const db = await getDb();
   if (!db) {
     console.warn("[Database] Cannot upsert user: database not available");
@@ -35,7 +32,6 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     const updateSet: Record<string, unknown> = {};
     const textFields = ["name", "email", "loginMethod"] as const;
     type TextField = (typeof textFields)[number];
-
     const assignNullable = (field: TextField) => {
       const value = user[field];
       if (value === undefined) return;
@@ -59,7 +55,6 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 
     if (!values.lastSignedIn) values.lastSignedIn = new Date();
     if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
-
     await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
@@ -87,6 +82,9 @@ export class NoodleIdentityError extends Error {
   }
 }
 
+export type NoodleMood = "beef" | "chicken" | "octopus";
+export type NoodleBoard = NoodleMood | "total";
+
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
@@ -106,89 +104,107 @@ function requireNoodleDb() {
   });
 }
 
+function issueToken() {
+  return randomBytes(32).toString("base64url");
+}
+
+async function openPlayerSession(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  player: { id: number; displayName: string; loginTokenHash: string },
+  suppliedToken?: string,
+) {
+  if (suppliedToken && hashToken(suppliedToken) === player.loginTokenHash) {
+    return { playerId: player.id, name: player.displayName, token: suppliedToken, returning: true };
+  }
+
+  // A known nickname is the passwordless identity for this friends-only site.
+  // Issue a fresh device token so a returning player can recover the same score.
+  const token = issueToken();
+  await db.update(noodlePlayers).set({ loginTokenHash: hashToken(token) }).where(eq(noodlePlayers.id, player.id));
+  return { playerId: player.id, name: player.displayName, token, returning: true };
+}
+
 export async function joinNoodlePlayer(name: string, existingToken?: string) {
   const db = await requireNoodleDb();
   const displayName = normalizeNoodleName(name);
   const nameKey = noodleNameKey(displayName);
+  const existing = await db.select({
+    id: noodlePlayers.id,
+    displayName: noodlePlayers.displayName,
+    loginTokenHash: noodlePlayers.loginTokenHash,
+  }).from(noodlePlayers).where(eq(noodlePlayers.nameKey, nameKey)).limit(1);
 
-  if (existingToken) {
-    const tokenHash = hashToken(existingToken);
-    const existing = await db.select().from(noodlePlayers)
-      .where(and(eq(noodlePlayers.nameKey, nameKey), eq(noodlePlayers.loginTokenHash, tokenHash)))
-      .limit(1);
-    if (existing[0]) {
-      return { playerId: existing[0].id, name: existing[0].displayName, token: existingToken };
-    }
+  if (existing[0]) return openPlayerSession(db, existing[0], existingToken);
 
-    const nameAlreadyUsed = await db.select({ id: noodlePlayers.id }).from(noodlePlayers)
-      .where(eq(noodlePlayers.nameKey, nameKey)).limit(1);
-    if (nameAlreadyUsed[0]) {
-      throw new NoodleIdentityError("Tên này đã có người chơi khác dùng rồi. Hãy chọn một tên khác nhé.", "name-taken");
-    }
-    throw new NoodleIdentityError("Phiên chơi trên thiết bị này không khớp với tên đã nhập.", "invalid-session");
-  }
-
-  const nameAlreadyUsed = await db.select({ id: noodlePlayers.id }).from(noodlePlayers)
-    .where(eq(noodlePlayers.nameKey, nameKey)).limit(1);
-  if (nameAlreadyUsed[0]) {
-    throw new NoodleIdentityError("Tên này đã có người chơi khác dùng rồi. Hãy chọn một tên khác nhé.", "name-taken");
-  }
-
-  const token = randomBytes(32).toString("base64url");
+  const token = issueToken();
   try {
     await db.insert(noodlePlayers).values({
       displayName,
       nameKey,
       loginTokenHash: hashToken(token),
       totalClicks: 0,
+      beefClicks: 0,
+      chickenClicks: 0,
+      octopusClicks: 0,
     });
   } catch (error) {
+    // If two friends choose the same name at once, the second joins that same row
+    // instead of receiving the old duplicate-name error.
     if (typeof error === "object" && error !== null && "code" in error && error.code === "ER_DUP_ENTRY") {
-      throw new NoodleIdentityError("Tên này vừa được người khác chọn. Thử tên khác nhé.", "name-taken");
+      const racedPlayer = await db.select({
+        id: noodlePlayers.id,
+        displayName: noodlePlayers.displayName,
+        loginTokenHash: noodlePlayers.loginTokenHash,
+      }).from(noodlePlayers).where(eq(noodlePlayers.nameKey, nameKey)).limit(1);
+      if (racedPlayer[0]) return openPlayerSession(db, racedPlayer[0]);
     }
     throw error;
   }
 
-  const created = await db.select({ id: noodlePlayers.id }).from(noodlePlayers)
-    .where(eq(noodlePlayers.nameKey, nameKey)).limit(1);
+  const created = await db.select({ id: noodlePlayers.id, displayName: noodlePlayers.displayName })
+    .from(noodlePlayers).where(eq(noodlePlayers.nameKey, nameKey)).limit(1);
   if (!created[0]) throw new Error("Could not load the newly created player");
-  return { playerId: created[0].id, name: displayName, token };
+  return { playerId: created[0].id, name: created[0].displayName, token, returning: false };
 }
 
-export async function getNoodleLeaderboard(token?: string) {
+function boardColumn(board: NoodleBoard) {
+  switch (board) {
+    case "beef": return noodlePlayers.beefClicks;
+    case "chicken": return noodlePlayers.chickenClicks;
+    case "octopus": return noodlePlayers.octopusClicks;
+    default: return noodlePlayers.totalClicks;
+  }
+}
+
+export async function getNoodleLeaderboard(token?: string, board: NoodleBoard = "total") {
   const db = await requireNoodleDb();
+  const scoreColumn = boardColumn(board);
   const top = await db.select({
     playerId: noodlePlayers.id,
     name: noodlePlayers.displayName,
-    totalClicks: noodlePlayers.totalClicks,
-  }).from(noodlePlayers)
-    .orderBy(desc(noodlePlayers.totalClicks), asc(noodlePlayers.id))
+    score: scoreColumn,
+  }).from(noodlePlayers).where(board === "total" ? undefined : gt(scoreColumn, 0))
+    .orderBy(desc(scoreColumn), asc(noodlePlayers.id))
     .limit(10);
 
-  let me: { playerId: number; name: string; totalClicks: number; rank: number } | null = null;
+  let me: { playerId: number; name: string; score: number; rank: number } | null = null;
   if (token) {
     const tokenHash = hashToken(token);
     const playerRows = await db.select({
       playerId: noodlePlayers.id,
       name: noodlePlayers.displayName,
-      totalClicks: noodlePlayers.totalClicks,
-      id: noodlePlayers.id,
+      score: scoreColumn,
     }).from(noodlePlayers).where(eq(noodlePlayers.loginTokenHash, tokenHash)).limit(1);
     const player = playerRows[0];
-    if (player) {
-      const ahead = await db.select({ value: count() }).from(noodlePlayers).where(
-        and(
-          gt(noodlePlayers.totalClicks, player.totalClicks),
-          // The first clause above counts strictly higher scores; the id tie-break keeps rank stable.
-        ),
-      );
-      const sameScoreAhead = await db.select({ value: count() }).from(noodlePlayers).where(
-        and(eq(noodlePlayers.totalClicks, player.totalClicks), lt(noodlePlayers.id, player.id)),
-      );
+    if (player && (board === "total" || player.score > 0)) {
+      const ahead = await db.select({ value: count() }).from(noodlePlayers)
+        .where(gt(scoreColumn, player.score));
+      const sameScoreAhead = await db.select({ value: count() }).from(noodlePlayers)
+        .where(and(eq(scoreColumn, player.score), lt(noodlePlayers.id, player.playerId)));
       me = {
         playerId: player.playerId,
         name: player.name,
-        totalClicks: player.totalClicks,
+        score: player.score,
         rank: Number(ahead[0]?.value ?? 0) + Number(sameScoreAhead[0]?.value ?? 0) + 1,
       };
     }
@@ -197,7 +213,7 @@ export async function getNoodleLeaderboard(token?: string) {
   return { top, me };
 }
 
-export async function recordNoodleClick(token: string): Promise<NoodlePlayer | null> {
+export async function recordNoodleClick(token: string, mood: NoodleMood): Promise<NoodlePlayer | null> {
   const db = await requireNoodleDb();
   const tokenHash = hashToken(token);
   const playerRows = await db.select({ id: noodlePlayers.id }).from(noodlePlayers)
@@ -205,9 +221,21 @@ export async function recordNoodleClick(token: string): Promise<NoodlePlayer | n
   const player = playerRows[0];
   if (!player) return null;
 
-  await db.update(noodlePlayers)
-    .set({ totalClicks: sql`${noodlePlayers.totalClicks} + 1` })
-    .where(eq(noodlePlayers.id, player.id));
+  const totalClicks = sql`${noodlePlayers.totalClicks} + 1`;
+  switch (mood) {
+    case "beef":
+      await db.update(noodlePlayers).set({ totalClicks, beefClicks: sql`${noodlePlayers.beefClicks} + 1` })
+        .where(eq(noodlePlayers.id, player.id));
+      break;
+    case "chicken":
+      await db.update(noodlePlayers).set({ totalClicks, chickenClicks: sql`${noodlePlayers.chickenClicks} + 1` })
+        .where(eq(noodlePlayers.id, player.id));
+      break;
+    case "octopus":
+      await db.update(noodlePlayers).set({ totalClicks, octopusClicks: sql`${noodlePlayers.octopusClicks} + 1` })
+        .where(eq(noodlePlayers.id, player.id));
+      break;
+  }
 
   const updated = await db.select().from(noodlePlayers).where(eq(noodlePlayers.id, player.id)).limit(1);
   return updated[0] ?? null;

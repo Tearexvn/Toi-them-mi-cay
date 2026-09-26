@@ -9,12 +9,16 @@ import {
   joinNoodlePlayer,
   NoodleIdentityError,
   normalizeNoodleName,
+  NoodleBoard,
+  NoodleMood,
   recordNoodleClick,
 } from "./db";
 
 const nameInput = z.string().trim().min(1, "Nhập tên trước đã nhé.").max(24, "Tên tối đa 24 ký tự thôi nhé.")
   .refine((value) => !/[<>\u0000-\u001f\u007f]/.test(value), "Tên có ký tự không hợp lệ.");
 const tokenInput = z.string().min(32).max(128);
+const moodInput = z.enum(["beef", "chicken", "octopus"]);
+const boardInput = z.enum(["total", "beef", "chicken", "octopus"]);
 
 function mapIdentityError(error: unknown): never {
   if (error instanceof NoodleIdentityError) {
@@ -39,10 +43,12 @@ export const appRouter = router({
   }),
   noodle: router({
     leaderboard: publicProcedure
-      .input(z.object({ token: tokenInput.optional() }).optional())
+      .input(z.object({ token: tokenInput.optional(), board: boardInput.optional() }).optional())
       .query(async ({ input }) => {
         try {
-          return await getNoodleLeaderboard(input?.token);
+          const token = input?.token;
+          const board: NoodleBoard = input?.board ?? "total";
+          return await getNoodleLeaderboard(token, board);
         } catch (error) {
           mapIdentityError(error);
         }
@@ -59,12 +65,18 @@ export const appRouter = router({
         }
       }),
     click: publicProcedure
-      .input(z.object({ token: tokenInput }))
+      .input(z.object({ token: tokenInput, mood: moodInput }))
       .mutation(async ({ input }) => {
+        const mood: NoodleMood = input.mood;
         try {
-          const player = await recordNoodleClick(input.token);
+          const player = await recordNoodleClick(input.token, mood);
           if (!player) throw new TRPCError({ code: "UNAUTHORIZED", message: "Phiên chơi không còn hợp lệ. Hãy nhập lại tên nhé." });
-          return { totalClicks: player.totalClicks };
+          return {
+            totalClicks: player.totalClicks,
+            beefClicks: player.beefClicks,
+            chickenClicks: player.chickenClicks,
+            octopusClicks: player.octopusClicks,
+          };
         } catch (error) {
           if (error instanceof TRPCError) throw error;
           mapIdentityError(error);
