@@ -1,0 +1,76 @@
+import { z } from "zod";
+import { TRPCError } from "@trpc/server";
+import { COOKIE_NAME } from "@shared/const";
+import { getSessionCookieOptions } from "./_core/cookies";
+import { systemRouter } from "./_core/systemRouter";
+import { publicProcedure, router } from "./_core/trpc";
+import {
+  getNoodleLeaderboard,
+  joinNoodlePlayer,
+  NoodleIdentityError,
+  normalizeNoodleName,
+  recordNoodleClick,
+} from "./db";
+
+const nameInput = z.string().trim().min(1, "Nhập tên trước đã nhé.").max(24, "Tên tối đa 24 ký tự thôi nhé.")
+  .refine((value) => !/[<>\u0000-\u001f\u007f]/.test(value), "Tên có ký tự không hợp lệ.");
+const tokenInput = z.string().min(32).max(128);
+
+function mapIdentityError(error: unknown): never {
+  if (error instanceof NoodleIdentityError) {
+    const code = error.reason === "name-taken" ? "CONFLICT" :
+      error.reason === "not-found" ? "NOT_FOUND" :
+      error.reason === "invalid-session" ? "UNAUTHORIZED" : "SERVICE_UNAVAILABLE";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  console.error("[Noodle leaderboard] Request failed", error);
+  throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "BXH đang nghỉ ăn mì một chút. Thử lại sau nhé." });
+}
+
+export const appRouter = router({
+  system: systemRouter,
+  auth: router({
+    me: publicProcedure.query((opts) => opts.ctx.user),
+    logout: publicProcedure.mutation(({ ctx }) => {
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      return { success: true } as const;
+    }),
+  }),
+  noodle: router({
+    leaderboard: publicProcedure
+      .input(z.object({ token: tokenInput.optional() }).optional())
+      .query(async ({ input }) => {
+        try {
+          return await getNoodleLeaderboard(input?.token);
+        } catch (error) {
+          mapIdentityError(error);
+        }
+      }),
+    join: publicProcedure
+      .input(z.object({ name: nameInput, token: tokenInput.optional() }))
+      .mutation(async ({ input }) => {
+        const name = normalizeNoodleName(input.name);
+        if (name.length > 24) throw new TRPCError({ code: "BAD_REQUEST", message: "Tên tối đa 24 ký tự thôi nhé." });
+        try {
+          return await joinNoodlePlayer(name, input.token);
+        } catch (error) {
+          mapIdentityError(error);
+        }
+      }),
+    click: publicProcedure
+      .input(z.object({ token: tokenInput }))
+      .mutation(async ({ input }) => {
+        try {
+          const player = await recordNoodleClick(input.token);
+          if (!player) throw new TRPCError({ code: "UNAUTHORIZED", message: "Phiên chơi không còn hợp lệ. Hãy nhập lại tên nhé." });
+          return { totalClicks: player.totalClicks };
+        } catch (error) {
+          if (error instanceof TRPCError) throw error;
+          mapIdentityError(error);
+        }
+      }),
+  }),
+});
+
+export type AppRouter = typeof appRouter;
