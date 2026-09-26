@@ -17,6 +17,7 @@ import {
   SECRET_HOLD_DURATION_MS,
 } from "@shared/noodle-achievements";
 import { leaderboardSelectionReducer, type LeaderboardBoard } from "@shared/leaderboard-selection";
+import { interleaveNoodleAndTopping } from "@shared/noodle-particles";
 import {
   addNoodleExperience,
   didNoodleLevelUp,
@@ -131,7 +132,7 @@ function medalFor(rank: number) {
 export default function Home() {
   const [mood, setMood] = useState<Mood>("beef");
   const [activeBoard, dispatchBoard] = useReducer(leaderboardSelectionReducer, "total");
-  const [particles, setParticles] = useState<{ id: number; style: ParticleStyle }[]>([]);
+  const [particles, setParticles] = useState<{ id: number; emoji: string; style: ParticleStyle }[]>([]);
   const [fireDrops, setFireDrops] = useState<ReturnType<typeof createFireDrops>>([]);
   const [achievementFireworks, setAchievementFireworks] = useState<ReturnType<typeof createAchievementFireworks>>([]);
   const [xpGainPops, setXpGainPops] = useState<ReturnType<typeof createXpGainPop>[]>([]);
@@ -324,12 +325,14 @@ export default function Home() {
     }
 
     const now = Date.now();
+    const burstEmojis = interleaveNoodleAndTopping(activeMood.emoji, 14);
     const newParticles = Array.from({ length: 14 }, (_, index) => {
       const angle = (Math.PI * 2 * index) / 14 + Math.random() * 0.5;
       const distance = 150 + Math.random() * 240;
       const id = now + index;
       return {
         id,
+        emoji: burstEmojis[index] ?? "🍜",
         style: {
           "--dx": `${Math.cos(angle) * distance}px`,
           "--dy": `${Math.sin(angle) * distance - 55}px`,
@@ -493,7 +496,7 @@ export default function Home() {
           </div>
           <div className="burst-layer" aria-hidden="true">
             {particles.map((particle) => (
-              <span key={particle.id} className="noodle-particle" style={particle.style}>🍜</span>
+              <span key={particle.id} className="noodle-particle" style={particle.style}>{particle.emoji}</span>
             ))}
           </div>
           <button
