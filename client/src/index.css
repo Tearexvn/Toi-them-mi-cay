@@ -323,8 +323,16 @@ button { font: inherit; }
 .leaderboard-eyebrow { margin: 0 0 7px; color: #a08a78; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
 .rank-spark { margin-right: 5px; color: var(--accent); }
 .leaderboard-heading h2 { margin: 0; color: #3b261d; font-family: "Bricolage Grotesque", sans-serif; font-size: 22px; font-weight: 800; letter-spacing: -.045em; }
+.leaderboard-header-actions { display: flex; flex-shrink: 0; align-items: center; justify-content: flex-end; gap: 7px; }
 .live-tag { display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px; border: 1px solid rgba(76, 133, 86, .14); border-radius: 999px; background: rgba(233, 244, 228, .66); color: #648267; white-space: nowrap; font-size: 9px; font-weight: 700; }
 .live-dot { width: 6px; height: 6px; border-radius: 50%; background: #71a877; box-shadow: 0 0 0 3px rgba(113,168,119,.12); }
+.leaderboard-refresh { display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; border: 1px solid rgba(104, 68, 43, .14); border-radius: 50%; background: rgba(255, 252, 243, .82); color: #785942; cursor: pointer; transition: transform 150ms cubic-bezier(.23,1,.32,1), background 150ms ease, border-color 150ms ease, color 150ms ease; }
+.leaderboard-refresh:hover:not(:disabled) { transform: rotate(24deg); border-color: color-mix(in srgb, var(--accent) 35%, transparent); background: #fff8ed; color: var(--accent-deep); }
+.leaderboard-refresh:active:not(:disabled) { transform: scale(.94); }
+.leaderboard-refresh:focus-visible { outline: 3px solid #3f261d; outline-offset: 2px; }
+.leaderboard-refresh:disabled { cursor: wait; opacity: .72; }
+.leaderboard-refresh .is-spinning { animation: leaderboard-refresh-spin 800ms linear infinite; }
+@keyframes leaderboard-refresh-spin { to { transform: rotate(360deg); } }
 .leaderboard-list { display: flex; flex-direction: column; margin: 0; padding: 7px 14px; list-style: none; }
 .leaderboard-row { display: grid; grid-template-columns: 31px 33px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 52px; border-bottom: 1px solid rgba(104, 68, 43, .075); padding: 6px 10px; color: #533c30; transition: background 160ms ease, transform 160ms ease; }
 .leaderboard-row:last-child { border-bottom: 0; }
@@ -356,6 +364,8 @@ button { font: inherit; }
   .mood-picker { margin-bottom: 38px; }
   .leaderboard-wrap { padding: 0 16px 35px; }
   .leaderboard-heading { padding: 19px 17px 14px; }
+  .leaderboard-header-actions { gap: 5px; }
+  .leaderboard-refresh { width: 28px; height: 28px; flex-basis: 28px; }
   .leaderboard-heading h2 { font-size: 20px; }
   .live-tag { padding: 6px 7px; font-size: 8px; }
   .leaderboard-list { padding: 6px 9px; }

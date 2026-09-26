@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useMemo, useReducer, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { trpc } from "@/lib/trpc";
+import { RefreshCw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +10,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { getAchievementPanelState, NOODLE_ACHIEVEMENTS } from "@shared/noodle-achievements";
+import { leaderboardSelectionReducer, type LeaderboardBoard } from "@shared/leaderboard-selection";
 import {
   addNoodleExperience,
   didNoodleLevelUp,
@@ -18,7 +20,7 @@ import {
 } from "@shared/noodle-level";
 
 type Mood = "beef" | "chicken" | "octopus";
-type Board = Mood | "total";
+type Board = LeaderboardBoard;
 type ParticleStyle = CSSProperties & {
   "--dx": string;
   "--dy": string;
@@ -91,7 +93,7 @@ function medalFor(rank: number) {
 
 export default function Home() {
   const [mood, setMood] = useState<Mood>("beef");
-  const [activeBoard, setActiveBoard] = useState<Board>("total");
+  const [activeBoard, dispatchBoard] = useReducer(leaderboardSelectionReducer, "total");
   const [particles, setParticles] = useState<{ id: number; style: ParticleStyle }[]>([]);
   const [fireDrops, setFireDrops] = useState<ReturnType<typeof createFireDrops>>([]);
   const [xpGainPops, setXpGainPops] = useState<ReturnType<typeof createXpGainPop>[]>([]);
@@ -112,6 +114,10 @@ export default function Home() {
     leaderboardInput,
     { refetchInterval: 10_000, refetchOnWindowFocus: true, retry: 1 },
   );
+  function refreshLeaderboard() {
+    dispatchBoard({ type: "refresh" });
+    void leaderboard.refetch();
+  }
   const joinPlayer = trpc.noodle.join.useMutation({
     onSuccess: (session) => {
       try {
@@ -417,7 +423,19 @@ export default function Home() {
               <p className="leaderboard-eyebrow"><span className="rank-spark">✳</span> BẢNG XẾP HẠNG</p>
               <h2 id="leaderboard-title">Ai thèm mì nhất?</h2>
             </div>
-            <span className="live-tag"><span className="live-dot" /> cập nhật liên tục</span>
+            <div className="leaderboard-header-actions">
+              <span className="live-tag"><span className="live-dot" /> cập nhật liên tục</span>
+              <button
+                className="leaderboard-refresh"
+                type="button"
+                onClick={refreshLeaderboard}
+                disabled={leaderboard.isFetching}
+                aria-label={leaderboard.isFetching ? "Đang tải lại bảng xếp hạng" : `Tải lại BXH ${activeBoardLabel}`}
+                title={`Tải lại BXH ${activeBoardLabel}`}
+              >
+                <RefreshCw size={14} aria-hidden="true" className={leaderboard.isFetching ? "is-spinning" : ""} />
+              </button>
+            </div>
           </div>
           <div className="leaderboard-tabs" role="tablist" aria-label="Chọn bảng xếp hạng">
             {boards.map((board) => (
@@ -427,7 +445,7 @@ export default function Home() {
                 role="tab"
                 aria-selected={activeBoard === board.id}
                 className={`leaderboard-tab ${activeBoard === board.id ? "is-active" : ""}`}
-                onClick={() => setActiveBoard(board.id)}
+                onClick={() => dispatchBoard({ type: "select", board: board.id })}
               >
                 <span aria-hidden="true">{board.emoji}</span>
                 <span>{board.label}</span>
