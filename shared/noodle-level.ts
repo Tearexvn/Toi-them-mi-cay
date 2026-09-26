@@ -54,3 +54,19 @@ export function didNoodleLevelUp(
 ) {
   return getNoodleLevelProgress(nextExperience).level > getNoodleLevelProgress(previousExperience).level;
 }
+
+export function addNoodleExperience(experience: bigint | number | string) {
+  return (getNoodleLevelProgress(experience).totalExperience + ONE).toString();
+}
+
+export function removeNoodleExperience(experience: bigint | number | string) {
+  const total = getNoodleLevelProgress(experience).totalExperience;
+  return (total > ZERO ? total - ONE : ZERO).toString();
+}
+
+export function maxNoodleExperience(...values: Array<bigint | number | string>) {
+  return values.reduce<bigint>((highest, value) => {
+    const parsed = getNoodleLevelProgress(value).totalExperience;
+    return parsed > highest ? parsed : highest;
+  }, ZERO).toString();
+}

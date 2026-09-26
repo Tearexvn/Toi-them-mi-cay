@@ -1,6 +1,12 @@
-import { useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { trpc } from "@/lib/trpc";
-import { didNoodleLevelUp, getNoodleLevelProgress } from "@shared/noodle-level";
+import {
+  addNoodleExperience,
+  didNoodleLevelUp,
+  getNoodleLevelProgress,
+  maxNoodleExperience,
+  removeNoodleExperience,
+} from "@shared/noodle-level";
 
 type Mood = "beef" | "chicken" | "octopus";
 type Board = Mood | "total";
@@ -14,6 +20,7 @@ type FireStyle = CSSProperties & {
   "--fire-duration": string;
   "--fire-drift": string;
 };
+type XpGainStyle = CSSProperties & { "--xp-drift": string };
 
 const moods: { id: Mood; label: string; emoji: string; note: string }[] = [
   { id: "beef", label: "Bò", emoji: "🥩", note: "BÒ CHÍN TỚI" },
@@ -48,6 +55,16 @@ function createFireDrops() {
   }));
 }
 
+function createXpGainPop() {
+  return {
+    id: `${Date.now()}-${Math.random()}`,
+    style: {
+      left: `${44 + Math.random() * 12}%`,
+      "--xp-drift": `${Math.random() * 36 - 18}px`,
+    } as XpGainStyle,
+  };
+}
+
 function readSession(key: string) {
   try {
     return window.localStorage.getItem(key) ?? "";
@@ -68,7 +85,9 @@ export default function Home() {
   const [activeBoard, setActiveBoard] = useState<Board>("total");
   const [particles, setParticles] = useState<{ id: number; style: ParticleStyle }[]>([]);
   const [fireDrops, setFireDrops] = useState<ReturnType<typeof createFireDrops>>([]);
-  const [xpGainKey, setXpGainKey] = useState(0);
+  const [xpGainPops, setXpGainPops] = useState<ReturnType<typeof createXpGainPop>[]>([]);
+  const [optimisticExperience, setOptimisticExperience] = useState<string | null>(null);
+  const optimisticExperienceRef = useRef<string | null>(null);
   const [playerToken, setPlayerToken] = useState(() => readSession(TOKEN_KEY));
   const [playerName, setPlayerName] = useState(() => readSession(NAME_KEY));
   const [draftName, setDraftName] = useState("");
@@ -94,6 +113,9 @@ export default function Home() {
       setPlayerToken(session.token);
       setPlayerName(session.name);
       setDraftName("");
+      optimisticExperienceRef.current = null;
+      setOptimisticExperience(null);
+      setXpGainPops([]);
       setNotice(session.returning
         ? `Chào ${session.name}! Đã vào lại hồ sơ, điểm cũ còn nguyên.`
         : `Chào ${session.name}! Bấm mì là lên bảng.`);
@@ -101,19 +123,26 @@ export default function Home() {
     },
   });
   const recordClick = trpc.noodle.click.useMutation({
-    onSuccess: async (result) => {
-      setXpGainKey((current) => current + 1);
-      if (didNoodleLevelUp(result.previousExperience, result.experience)) {
-        const drops = createFireDrops();
-        const expiredIds = new Set(drops.map((drop) => drop.id));
-        setFireDrops(drops);
-        window.setTimeout(() => {
-          setFireDrops((current) => current.filter((drop) => !expiredIds.has(drop.id)));
-        }, 3300);
+    onSuccess: async (result, variables) => {
+      if (variables.token === playerToken) {
+        const reconciled = maxNoodleExperience(
+          optimisticExperienceRef.current ?? result.experience,
+          result.experience,
+        );
+        optimisticExperienceRef.current = reconciled;
+        setOptimisticExperience(reconciled);
       }
       await utils.noodle.leaderboard.invalidate();
     },
-    onError: (error) => setNotice(error.message || "Không ghi được lượt bấm. Thử lại nhé."),
+    onError: async (error, variables) => {
+      if (variables.token === playerToken) {
+        const rolledBack = removeNoodleExperience(optimisticExperienceRef.current ?? experience);
+        optimisticExperienceRef.current = rolledBack;
+        setOptimisticExperience(rolledBack);
+      }
+      setNotice(error.message || "Không ghi được lượt bấm. Thử lại nhé.");
+      await utils.noodle.leaderboard.invalidate();
+    },
   });
 
   const activeMood = moods.find((item) => item.id === mood) ?? moods[0];
@@ -123,7 +152,10 @@ export default function Home() {
   const totalClicks = Math.max(leaderboard.data?.player?.totalClicks ?? 0, lastRecordedTotalClicks);
   const activeBoardLabel = boards.find((board) => board.id === activeBoard)?.label ?? "Tổng";
   const lastRecordedExperience = recordClick.variables?.token === playerToken ? recordClick.data?.experience : undefined;
-  const experience = lastRecordedExperience ?? leaderboard.data?.player?.experience ?? "0";
+  const serverExperience = lastRecordedExperience ?? leaderboard.data?.player?.experience ?? "0";
+  const experience = optimisticExperience === null
+    ? serverExperience
+    : maxNoodleExperience(serverExperience, optimisticExperience);
   const levelProgress = useMemo(() => getNoodleLevelProgress(experience), [experience]);
 
   function makeItRain() {
@@ -155,6 +187,23 @@ export default function Home() {
 
     setParticles((current) => [...current.slice(-28), ...newParticles]);
     setNotice("");
+    const previousExperience = optimisticExperienceRef.current ?? experience;
+    const nextExperience = addNoodleExperience(previousExperience);
+    optimisticExperienceRef.current = nextExperience;
+    setOptimisticExperience(nextExperience);
+    const xpGain = createXpGainPop();
+    setXpGainPops((current) => [...current.slice(-5), xpGain]);
+    window.setTimeout(() => {
+      setXpGainPops((current) => current.filter((pop) => pop.id !== xpGain.id));
+    }, 900);
+    if (didNoodleLevelUp(previousExperience, nextExperience)) {
+      const drops = createFireDrops();
+      const expiredIds = new Set(drops.map((drop) => drop.id));
+      setFireDrops((current) => [...current.slice(-34), ...drops]);
+      window.setTimeout(() => {
+        setFireDrops((current) => current.filter((drop) => !expiredIds.has(drop.id)));
+      }, 3300);
+    }
     recordClick.mutate({ token: playerToken, mood });
     window.setTimeout(() => {
       setParticles((current) => current.filter((particle) => !newParticles.some((created) => created.id === particle.id)));
@@ -181,6 +230,10 @@ export default function Home() {
     }
     setPlayerToken("");
     setPlayerName("");
+    optimisticExperienceRef.current = null;
+    setOptimisticExperience(null);
+    setXpGainPops([]);
+    setFireDrops([]);
     setNotice("Đã thoát khỏi lượt chơi. Điểm cũ vẫn nằm trên BXH nhé.");
     void utils.noodle.leaderboard.invalidate();
   }
@@ -246,6 +299,9 @@ export default function Home() {
         )}
 
         <div className="button-stage">
+          <div className="xp-gain-layer" aria-hidden="true">
+            {xpGainPops.map((pop) => <span key={pop.id} className="xp-gain-pop" style={pop.style}>+1 XP</span>)}
+          </div>
           <div className="burst-layer" aria-hidden="true">
             {particles.map((particle) => (
               <span key={particle.id} className="noodle-particle" style={particle.style}>🍜</span>
@@ -273,7 +329,6 @@ export default function Home() {
             <span className="level-progress-value">
               {levelProgress.currentLevelExperience.toLocaleString("vi-VN")} / {levelProgress.experienceForNextLevel.toLocaleString("vi-VN")} XP
             </span>
-            {xpGainKey > 0 && <span key={xpGainKey} className="xp-gain-pop" aria-hidden="true">+1 XP</span>}
           </div>
           <p className="level-progress-caption">
             Còn {levelProgress.experienceRemaining.toLocaleString("vi-VN")} XP lên cấp {(levelProgress.level + BigInt(1)).toString()}

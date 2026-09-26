@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { didNoodleLevelUp, getNoodleLevelProgress } from "../shared/noodle-level";
+import {
+  addNoodleExperience,
+  didNoodleLevelUp,
+  getNoodleLevelProgress,
+  maxNoodleExperience,
+  removeNoodleExperience,
+} from "../shared/noodle-level";
 
 const xp = (value: number | string) => BigInt(value);
 
@@ -64,5 +70,12 @@ describe("noodle level progression", () => {
     expect(didNoodleLevelUp(xp(98), xp(99))).toBe(false);
     expect(didNoodleLevelUp(xp(99), xp(100))).toBe(true);
     expect(didNoodleLevelUp(xp(100), xp(101))).toBe(false);
+  });
+
+  it("supports immediate optimistic increments, safe rollback and monotonic reconciliation", () => {
+    expect(addNoodleExperience(xp(99))).toBe("100");
+    expect(removeNoodleExperience(xp(100))).toBe("99");
+    expect(removeNoodleExperience(xp(0))).toBe("0");
+    expect(maxNoodleExperience("99", "101", "100")).toBe("101");
   });
 });
