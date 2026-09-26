@@ -19,6 +19,7 @@ describe("achievement panel state", () => {
     const achievements = getUnlockedAchievements(true);
     expect(achievements).toEqual([BURNED_FINGER_ACHIEVEMENT]);
     expect(achievements[0]?.title).toBe("Bỏng tay chưa?");
+    expect(achievements[0]?.description).toBe("Đau sao không buông?");
     expect(getAchievementPanelState(achievements)).toBe("list");
   });
 });

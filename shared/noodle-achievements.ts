@@ -11,7 +11,7 @@ export const SECRET_HOLD_DURATION_MS = 10_000;
 export const BURNED_FINGER_ACHIEVEMENT: NoodleAchievement = {
   id: "burned-finger",
   title: "Bỏng tay chưa?",
-  description: "Một cơn thèm nóng đến mức khó quên.",
+  description: "Đau sao không buông?",
   icon: "🔥",
 };
 
