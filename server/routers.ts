@@ -80,11 +80,11 @@ export const appRouter = router({
         }
       }),
     click: publicProcedure
-      .input(z.object({ token: tokenInput, mood: moodInput }))
+      .input(z.object({ token: tokenInput, mood: moodInput, clientFlagged: z.boolean().optional() }))
       .mutation(async ({ input }) => {
         const mood: NoodleMood = input.mood;
         try {
-          const result = await recordNoodleClick(input.token, mood);
+          const result = await recordNoodleClick(input.token, mood, input.clientFlagged ?? false);
           if (!result) throw new TRPCError({ code: "UNAUTHORIZED", message: "Phiên chơi không còn hợp lệ. Hãy nhập lại tên nhé." });
           const player = result.player;
           return {
@@ -94,6 +94,10 @@ export const appRouter = router({
             beefClicks: player.beefClicks,
             chickenClicks: player.chickenClicks,
             octopusClicks: player.octopusClicks,
+            accepted: result.accepted,
+            suspiciousReason: result.suspiciousReason,
+            antiClickAchievementUnlocked: player.antiClickAchievementUnlocked,
+            newlyUnlockedAntiClick: result.newlyUnlockedAntiClick,
           };
         } catch (error) {
           if (error instanceof TRPCError) throw error;

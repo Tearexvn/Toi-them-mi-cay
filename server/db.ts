@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, asc, count, desc, eq, gt, lt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { CLICK_HISTORY_LIMIT, detectSuspiciousClickPattern, type AntiAutoClickReason } from "../shared/anti-auto-click";
 import { InsertUser, noodlePlayers, NoodlePlayer, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -84,7 +85,13 @@ export class NoodleIdentityError extends Error {
 
 export type NoodleMood = "beef" | "chicken" | "octopus";
 export type NoodleBoard = NoodleMood | "total";
-export type NoodleClickResult = { player: NoodlePlayer; previousExperience: string };
+export type NoodleClickResult = {
+  player: NoodlePlayer;
+  previousExperience: string;
+  accepted: boolean;
+  suspiciousReason: AntiAutoClickReason | null;
+  newlyUnlockedAntiClick: boolean;
+};
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -111,18 +118,38 @@ function issueToken() {
 
 async function openPlayerSession(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
-  player: { id: number; displayName: string; loginTokenHash: string; burnedFingerUnlocked: boolean },
+  player: {
+    id: number;
+    displayName: string;
+    loginTokenHash: string;
+    burnedFingerUnlocked: boolean;
+    antiClickAchievementUnlocked: boolean;
+  },
   suppliedToken?: string,
 ) {
   if (suppliedToken && hashToken(suppliedToken) === player.loginTokenHash) {
-    return { playerId: player.id, name: player.displayName, token: suppliedToken, returning: true, burnedFingerUnlocked: player.burnedFingerUnlocked };
+    return {
+      playerId: player.id,
+      name: player.displayName,
+      token: suppliedToken,
+      returning: true,
+      burnedFingerUnlocked: player.burnedFingerUnlocked,
+      antiClickAchievementUnlocked: player.antiClickAchievementUnlocked,
+    };
   }
 
   // A known nickname is the passwordless identity for this friends-only site.
   // Issue a fresh device token so a returning player can recover the same score.
   const token = issueToken();
   await db.update(noodlePlayers).set({ loginTokenHash: hashToken(token) }).where(eq(noodlePlayers.id, player.id));
-  return { playerId: player.id, name: player.displayName, token, returning: true, burnedFingerUnlocked: player.burnedFingerUnlocked };
+  return {
+    playerId: player.id,
+    name: player.displayName,
+    token,
+    returning: true,
+    burnedFingerUnlocked: player.burnedFingerUnlocked,
+    antiClickAchievementUnlocked: player.antiClickAchievementUnlocked,
+  };
 }
 
 export async function joinNoodlePlayer(name: string, existingToken?: string) {
@@ -134,6 +161,7 @@ export async function joinNoodlePlayer(name: string, existingToken?: string) {
     displayName: noodlePlayers.displayName,
     loginTokenHash: noodlePlayers.loginTokenHash,
     burnedFingerUnlocked: noodlePlayers.burnedFingerUnlocked,
+    antiClickAchievementUnlocked: noodlePlayers.antiClickAchievementUnlocked,
   }).from(noodlePlayers).where(eq(noodlePlayers.nameKey, nameKey)).limit(1);
 
   if (existing[0]) return openPlayerSession(db, existing[0], existingToken);
@@ -149,6 +177,8 @@ export async function joinNoodlePlayer(name: string, existingToken?: string) {
       beefClicks: 0,
       chickenClicks: 0,
       octopusClicks: 0,
+      clickTimestamps: "[]",
+      antiClickAchievementUnlocked: false,
     });
   } catch (error) {
     // If two friends choose the same name at once, the second joins that same row
@@ -159,16 +189,29 @@ export async function joinNoodlePlayer(name: string, existingToken?: string) {
         displayName: noodlePlayers.displayName,
         loginTokenHash: noodlePlayers.loginTokenHash,
         burnedFingerUnlocked: noodlePlayers.burnedFingerUnlocked,
+        antiClickAchievementUnlocked: noodlePlayers.antiClickAchievementUnlocked,
       }).from(noodlePlayers).where(eq(noodlePlayers.nameKey, nameKey)).limit(1);
       if (racedPlayer[0]) return openPlayerSession(db, racedPlayer[0]);
     }
     throw error;
   }
 
-  const created = await db.select({ id: noodlePlayers.id, displayName: noodlePlayers.displayName })
+  const created = await db.select({
+    id: noodlePlayers.id,
+    displayName: noodlePlayers.displayName,
+    burnedFingerUnlocked: noodlePlayers.burnedFingerUnlocked,
+    antiClickAchievementUnlocked: noodlePlayers.antiClickAchievementUnlocked,
+  })
     .from(noodlePlayers).where(eq(noodlePlayers.nameKey, nameKey)).limit(1);
   if (!created[0]) throw new Error("Could not load the newly created player");
-  return { playerId: created[0].id, name: created[0].displayName, token, returning: false, burnedFingerUnlocked: false };
+  return {
+    playerId: created[0].id,
+    name: created[0].displayName,
+    token,
+    returning: false,
+    burnedFingerUnlocked: created[0].burnedFingerUnlocked,
+    antiClickAchievementUnlocked: created[0].antiClickAchievementUnlocked,
+  };
 }
 
 function boardColumn(board: NoodleBoard) {
@@ -192,7 +235,14 @@ export async function getNoodleLeaderboard(token?: string, board: NoodleBoard = 
     .limit(10);
 
   let me: { playerId: number; name: string; score: number; rank: number } | null = null;
-  let playerProgress: { playerId: number; name: string; totalClicks: number; experience: string; burnedFingerUnlocked: boolean } | null = null;
+  let playerProgress: {
+    playerId: number;
+    name: string;
+    totalClicks: number;
+    experience: string;
+    burnedFingerUnlocked: boolean;
+    antiClickAchievementUnlocked: boolean;
+  } | null = null;
   if (token) {
     const tokenHash = hashToken(token);
     const playerRows = await db.select({
@@ -202,6 +252,7 @@ export async function getNoodleLeaderboard(token?: string, board: NoodleBoard = 
       totalClicks: noodlePlayers.totalClicks,
       experience: noodlePlayers.experience,
       burnedFingerUnlocked: noodlePlayers.burnedFingerUnlocked,
+      antiClickAchievementUnlocked: noodlePlayers.antiClickAchievementUnlocked,
     }).from(noodlePlayers).where(eq(noodlePlayers.loginTokenHash, tokenHash)).limit(1);
     const player = playerRows[0];
     if (player) {
@@ -211,6 +262,7 @@ export async function getNoodleLeaderboard(token?: string, board: NoodleBoard = 
         totalClicks: player.totalClicks,
         experience: player.experience,
         burnedFingerUnlocked: player.burnedFingerUnlocked,
+        antiClickAchievementUnlocked: player.antiClickAchievementUnlocked,
       };
     }
     if (player && (board === "total" || player.score > 0)) {
@@ -230,19 +282,63 @@ export async function getNoodleLeaderboard(token?: string, board: NoodleBoard = 
   return { top, me, player: playerProgress };
 }
 
-export async function recordNoodleClick(token: string, mood: NoodleMood): Promise<NoodleClickResult | null> {
+export async function recordNoodleClick(
+  token: string,
+  mood: NoodleMood,
+  clientFlagged = false,
+): Promise<NoodleClickResult | null> {
   const db = await requireNoodleDb();
   const tokenHash = hashToken(token);
+  const receivedAt = Date.now();
   return db.transaction(async (tx) => {
-    const playerRows = await tx.select({ id: noodlePlayers.id, experience: noodlePlayers.experience })
+    const playerRows = await tx.select({
+      id: noodlePlayers.id,
+      experience: noodlePlayers.experience,
+      clickTimestamps: noodlePlayers.clickTimestamps,
+      antiClickAchievementUnlocked: noodlePlayers.antiClickAchievementUnlocked,
+    })
       .from(noodlePlayers).where(eq(noodlePlayers.loginTokenHash, tokenHash)).limit(1).for("update");
     const player = playerRows[0];
     if (!player) return null;
 
     const previousExperience = player.experience || "0";
+    let previousClickTimestamps: number[] = [];
+    try {
+      const storedTimestamps: unknown = JSON.parse(player.clickTimestamps || "[]");
+      if (Array.isArray(storedTimestamps)) {
+        previousClickTimestamps = storedTimestamps.filter(
+          (timestamp): timestamp is number => typeof timestamp === "number" && Number.isSafeInteger(timestamp),
+        );
+      }
+    } catch {
+      previousClickTimestamps = [];
+    }
+    const clickTimestamps = [...previousClickTimestamps, receivedAt]
+      .sort((left, right) => left - right)
+      .slice(-CLICK_HISTORY_LIMIT);
+    const latestReceivedAt = clickTimestamps.at(-1) ?? receivedAt;
+    const suspiciousReason = clientFlagged
+      ? "client-flagged"
+      : detectSuspiciousClickPattern(clickTimestamps, Math.max(receivedAt, latestReceivedAt));
+
+    if (suspiciousReason) {
+      await tx.update(noodlePlayers).set({
+        clickTimestamps: JSON.stringify(clickTimestamps),
+        antiClickAchievementUnlocked: true,
+      }).where(eq(noodlePlayers.id, player.id));
+      const flagged = await tx.select().from(noodlePlayers).where(eq(noodlePlayers.id, player.id)).limit(1);
+      return flagged[0] ? {
+        player: flagged[0],
+        previousExperience,
+        accepted: false,
+        suspiciousReason,
+        newlyUnlockedAntiClick: !player.antiClickAchievementUnlocked,
+      } : null;
+    }
+
     const totalClicks = sql`${noodlePlayers.totalClicks} + 1`;
     const experience = (BigInt(previousExperience) + BigInt(1)).toString();
-    const clickUpdate = { totalClicks, experience };
+    const clickUpdate = { totalClicks, experience, clickTimestamps: JSON.stringify(clickTimestamps) };
     switch (mood) {
       case "beef":
         await tx.update(noodlePlayers).set({ ...clickUpdate, beefClicks: sql`${noodlePlayers.beefClicks} + 1` })
@@ -259,7 +355,13 @@ export async function recordNoodleClick(token: string, mood: NoodleMood): Promis
     }
 
     const updated = await tx.select().from(noodlePlayers).where(eq(noodlePlayers.id, player.id)).limit(1);
-    return updated[0] ? { player: updated[0], previousExperience } : null;
+    return updated[0] ? {
+      player: updated[0],
+      previousExperience,
+      accepted: true,
+      suspiciousReason: null,
+      newlyUnlockedAntiClick: false,
+    } : null;
   });
 }
 

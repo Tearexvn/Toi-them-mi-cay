@@ -40,9 +40,9 @@ describe("noodle player names", () => {
     await expectBadRequest(() => caller.noodle.join({ name: "<script>" }));
   });
 
-  it("rejects short click tokens before querying the database", async () => {
+  it("requires a valid player token even when the client detector flags a click", async () => {
     const caller = createPublicCaller();
-    await expectBadRequest(() => caller.noodle.click({ token: "short", mood: "beef" }));
+    await expectBadRequest(() => caller.noodle.click({ token: "short", mood: "beef", clientFlagged: true }));
   });
 
   it("rejects short tokens before attempting to unlock an achievement", async () => {

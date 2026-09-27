@@ -17,6 +17,11 @@ import {
   SECRET_HOLD_DURATION_MS,
 } from "@shared/noodle-achievements";
 import { leaderboardSelectionReducer, type LeaderboardBoard } from "@shared/leaderboard-selection";
+import {
+  CLICK_HISTORY_LIMIT,
+  CLICK_RATE_WINDOW_MS,
+  detectSuspiciousClickPattern,
+} from "@shared/anti-auto-click";
 import { interleaveNoodleAndTopping } from "@shared/noodle-particles";
 import {
   addNoodleExperience,
@@ -139,7 +144,10 @@ export default function Home() {
   const [achievementDialogOpen, setAchievementDialogOpen] = useState(false);
   const [activeAchievementTab, setActiveAchievementTab] = useState<AchievementTab>("achievements");
   const [achievementToastOpen, setAchievementToastOpen] = useState(false);
+  const [antiClickToastOpen, setAntiClickToastOpen] = useState(false);
+  const [antiClickToastIsNewUnlock, setAntiClickToastIsNewUnlock] = useState(false);
   const [burnedFingerUnlockedLocal, setBurnedFingerUnlockedLocal] = useState(false);
+  const [antiClickAchievementUnlockedLocal, setAntiClickAchievementUnlockedLocal] = useState(false);
   const [isHoldingNoodle, setIsHoldingNoodle] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
   const [isExploding, setIsExploding] = useState(false);
@@ -149,6 +157,9 @@ export default function Home() {
   const holdIntervalRef = useRef<number | null>(null);
   const holdTriggeredRef = useRef(false);
   const toastTimeoutRef = useRef<number | null>(null);
+  const antiClickToastTimeoutRef = useRef<number | null>(null);
+  const clientClickTimestampsRef = useRef<number[]>([]);
+  const clientClickBlockedUntilRef = useRef(0);
   const fireworksTimeoutRef = useRef<number | null>(null);
   const explosionTimeoutRef = useRef<number | null>(null);
   const [playerToken, setPlayerToken] = useState(() => readSession(TOKEN_KEY));
@@ -157,6 +168,14 @@ export default function Home() {
   const [notice, setNotice] = useState("");
 
   const utils = trpc.useUtils();
+
+  function showAntiClickWarning(newlyUnlocked = false) {
+    setAntiClickToastIsNewUnlock(newlyUnlocked);
+    setAntiClickToastOpen(true);
+    if (antiClickToastTimeoutRef.current !== null) window.clearTimeout(antiClickToastTimeoutRef.current);
+    antiClickToastTimeoutRef.current = window.setTimeout(() => setAntiClickToastOpen(false), 5_500);
+  }
+
   const leaderboardInput = useMemo(
     () => ({ token: playerToken || undefined, board: activeBoard }),
     [playerToken, activeBoard],
@@ -197,6 +216,7 @@ export default function Home() {
       document.removeEventListener("visibilitychange", cancelHoldOnHiddenPage);
       if (holdIntervalRef.current !== null) window.clearInterval(holdIntervalRef.current);
       if (toastTimeoutRef.current !== null) window.clearTimeout(toastTimeoutRef.current);
+      if (antiClickToastTimeoutRef.current !== null) window.clearTimeout(antiClickToastTimeoutRef.current);
       if (fireworksTimeoutRef.current !== null) window.clearTimeout(fireworksTimeoutRef.current);
       if (explosionTimeoutRef.current !== null) window.clearTimeout(explosionTimeoutRef.current);
     };
@@ -213,7 +233,11 @@ export default function Home() {
       setPlayerName(session.name);
       setBurnedFingerUnlockedLocal(session.burnedFingerUnlocked);
       holdTriggeredRef.current = false;
+      clientClickTimestampsRef.current = [];
+      clientClickBlockedUntilRef.current = 0;
       setDraftName("");
+      setAntiClickAchievementUnlockedLocal(session.antiClickAchievementUnlocked);
+      setAntiClickToastOpen(false);
       optimisticExperienceRef.current = null;
       setOptimisticExperience(null);
       setXpGainPops([]);
@@ -226,22 +250,43 @@ export default function Home() {
   const recordClick = trpc.noodle.click.useMutation({
     onSuccess: async (result, variables) => {
       if (variables.token === playerToken) {
-        const reconciled = maxNoodleExperience(
-          optimisticExperienceRef.current ?? result.experience,
-          result.experience,
-        );
-        optimisticExperienceRef.current = reconciled;
-        setOptimisticExperience(reconciled);
+        if (result.accepted) {
+          const reconciled = maxNoodleExperience(
+            optimisticExperienceRef.current ?? result.experience,
+            result.experience,
+          );
+          optimisticExperienceRef.current = reconciled;
+          setOptimisticExperience(reconciled);
+        } else {
+          if (!variables.clientFlagged) {
+            const rolledBack = removeNoodleExperience(optimisticExperienceRef.current ?? experience);
+            optimisticExperienceRef.current = rolledBack;
+            setOptimisticExperience(rolledBack);
+          }
+          setParticles([]);
+          setXpGainPops([]);
+          setFireDrops([]);
+          setAntiClickAchievementUnlockedLocal(result.antiClickAchievementUnlocked);
+          setAchievementToastOpen(false);
+          if (toastTimeoutRef.current !== null) window.clearTimeout(toastTimeoutRef.current);
+          showAntiClickWarning(result.newlyUnlockedAntiClick);
+          if (result.newlyUnlockedAntiClick) {
+            const fireworks = createAchievementFireworks();
+            setAchievementFireworks(fireworks);
+            if (fireworksTimeoutRef.current !== null) window.clearTimeout(fireworksTimeoutRef.current);
+            fireworksTimeoutRef.current = window.setTimeout(() => setAchievementFireworks([]), 2_500);
+          }
+        }
       }
       await utils.noodle.leaderboard.invalidate();
     },
     onError: async (error, variables) => {
-      if (variables.token === playerToken) {
+      if (variables.token === playerToken && !variables.clientFlagged) {
         const rolledBack = removeNoodleExperience(optimisticExperienceRef.current ?? experience);
         optimisticExperienceRef.current = rolledBack;
         setOptimisticExperience(rolledBack);
       }
-      setNotice(error.message || "Không ghi được lượt bấm. Thử lại nhé.");
+      if (!variables.clientFlagged) setNotice(error.message || "Không ghi được lượt bấm. Thử lại nhé.");
       await utils.noodle.leaderboard.invalidate();
     },
   });
@@ -259,9 +304,10 @@ export default function Home() {
     : maxNoodleExperience(serverExperience, optimisticExperience);
   const levelProgress = useMemo(() => getNoodleLevelProgress(experience), [experience]);
   const burnedFingerUnlocked = burnedFingerUnlockedLocal || Boolean(leaderboard.data?.player?.burnedFingerUnlocked);
+  const antiClickAchievementUnlocked = antiClickAchievementUnlockedLocal || Boolean(leaderboard.data?.player?.antiClickAchievementUnlocked);
   const specialAchievements = useMemo(
-    () => getUnlockedAchievements(burnedFingerUnlocked),
-    [burnedFingerUnlocked],
+    () => getUnlockedAchievements(burnedFingerUnlocked, antiClickAchievementUnlocked),
+    [burnedFingerUnlocked, antiClickAchievementUnlocked],
   );
   const unlockedAchievements = useMemo(
     () => [...NOODLE_ACHIEVEMENTS, ...specialAchievements],
@@ -325,6 +371,21 @@ export default function Home() {
     }
 
     const now = Date.now();
+    if (now < clientClickBlockedUntilRef.current) return;
+    const clickTimestamps = [...clientClickTimestampsRef.current, now].slice(-CLICK_HISTORY_LIMIT);
+    clientClickTimestampsRef.current = clickTimestamps;
+    const suspiciousClickReason = detectSuspiciousClickPattern(clickTimestamps, now);
+    if (suspiciousClickReason) {
+      clientClickTimestampsRef.current = [];
+      clientClickBlockedUntilRef.current = now + CLICK_RATE_WINDOW_MS;
+      setParticles([]);
+      setXpGainPops([]);
+      setFireDrops([]);
+      showAntiClickWarning(false);
+      recordClick.mutate({ token: playerToken, mood, clientFlagged: true });
+      return;
+    }
+
     const burstEmojis = interleaveNoodleAndTopping(activeMood.emoji, 14);
     const newParticles = Array.from({ length: 14 }, (_, index) => {
       const angle = (Math.PI * 2 * index) / 14 + Math.random() * 0.5;
@@ -365,7 +426,7 @@ export default function Home() {
         setFireDrops((current) => current.filter((drop) => !expiredIds.has(drop.id)));
       }, 3300);
     }
-    recordClick.mutate({ token: playerToken, mood });
+    recordClick.mutate({ token: playerToken, mood, clientFlagged: false });
     window.setTimeout(() => {
       setParticles((current) => current.filter((particle) => !newParticles.some((created) => created.id === particle.id)));
     }, 1600);
@@ -392,6 +453,10 @@ export default function Home() {
     setPlayerToken("");
     setPlayerName("");
     setBurnedFingerUnlockedLocal(false);
+    setAntiClickAchievementUnlockedLocal(false);
+    setAntiClickToastOpen(false);
+    clientClickTimestampsRef.current = [];
+    clientClickBlockedUntilRef.current = 0;
     holdTriggeredRef.current = false;
     holdStartedAtRef.current = null;
     if (holdIntervalRef.current !== null) window.clearInterval(holdIntervalRef.current);
@@ -434,6 +499,26 @@ export default function Home() {
               onClick={() => {
                 setAchievementToastOpen(false);
                 if (toastTimeoutRef.current !== null) window.clearTimeout(toastTimeoutRef.current);
+              }}
+            >×</button>
+          </div>
+        </div>
+      )}
+      {antiClickToastOpen && (
+        <div className="achievement-toast-wrap">
+          <div className="achievement-toast anti-click-toast" role="status" aria-live="polite" aria-atomic="true">
+            <span className="achievement-toast-icon" aria-hidden="true">🤖</span>
+            <span className="achievement-toast-copy">
+              nghẹn mì cay rồi chậm lại tí!
+              <strong>{antiClickToastIsNewUnlock ? "Đã nhận thành tựu ẩn: Nhịp máy căng quá!" : "Lượt bấm bất thường đã bị chặn."}</strong>
+            </span>
+            <button
+              className="achievement-toast-close"
+              type="button"
+              aria-label="Đóng thông báo chống tự động bấm"
+              onClick={() => {
+                setAntiClickToastOpen(false);
+                if (antiClickToastTimeoutRef.current !== null) window.clearTimeout(antiClickToastTimeoutRef.current);
               }}
             >×</button>
           </div>
@@ -485,6 +570,7 @@ export default function Home() {
             <span className="welcome-avatar" aria-hidden="true">🍜</span>
             <span className="welcome-copy">đang chơi với tên <strong>{playerName}</strong>
               {burnedFingerUnlocked && <span className="secret-achievement-badge">🔥 Bỏng tay chưa?</span>}
+              {antiClickAchievementUnlocked && <span className="secret-achievement-badge anti-click-achievement-badge">🤖 Nhịp máy căng quá!</span>}
             </span>
             <button type="button" onClick={leavePlayer} className="change-player">đổi tên</button>
           </div>

@@ -36,6 +36,13 @@
       "when": 1790415182204,
       "tag": "0004_lazy_runaways",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1790471349253,
+      "tag": "0005_open_terrax",
+      "breakpoints": true
     }
   ]
 }

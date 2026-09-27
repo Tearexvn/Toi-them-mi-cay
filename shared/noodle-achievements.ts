@@ -15,10 +15,23 @@ export const BURNED_FINGER_ACHIEVEMENT: NoodleAchievement = {
   icon: "🔥",
 };
 
+export const ANTI_CLICK_ACHIEVEMENT: NoodleAchievement = {
+  id: "anti-click",
+  title: "Nhịp máy căng quá!",
+  description: "Nghẹn mì cay rồi, chậm lại tí!",
+  icon: "🤖",
+};
+
 export const NOODLE_ACHIEVEMENTS: readonly NoodleAchievement[] = [];
 
-export function getUnlockedAchievements(hasBurnedFinger: boolean): readonly NoodleAchievement[] {
-  return hasBurnedFinger ? [BURNED_FINGER_ACHIEVEMENT] : [];
+export function getUnlockedAchievements(
+  hasBurnedFinger: boolean,
+  hasAntiClickAchievement = false,
+): readonly NoodleAchievement[] {
+  return [
+    ...(hasBurnedFinger ? [BURNED_FINGER_ACHIEVEMENT] : []),
+    ...(hasAntiClickAchievement ? [ANTI_CLICK_ACHIEVEMENT] : []),
+  ];
 }
 
 export function getSecretHoldProgress(elapsedMs: number) {

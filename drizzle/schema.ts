@@ -30,6 +30,8 @@ export const noodlePlayers = mysqlTable("noodle_players", {
   chickenClicks: int("chickenClicks", { unsigned: true }).default(0).notNull(),
   octopusClicks: int("octopusClicks", { unsigned: true }).default(0).notNull(),
   burnedFingerUnlocked: boolean("burnedFingerUnlocked").default(false).notNull(),
+  clickTimestamps: varchar("clickTimestamps", { length: 768 }).default("[]").notNull(),
+  antiClickAchievementUnlocked: boolean("antiClickAchievementUnlocked").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

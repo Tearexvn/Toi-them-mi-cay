@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ANTI_CLICK_ACHIEVEMENT,
   BURNED_FINGER_ACHIEVEMENT,
   getAchievementPanelState,
   getSecretHoldProgress,
@@ -21,6 +22,20 @@ describe("achievement panel state", () => {
     expect(achievements[0]?.title).toBe("Bỏng tay chưa?");
     expect(achievements[0]?.description).toBe("Đau sao không buông?");
     expect(getAchievementPanelState(achievements)).toBe("list");
+  });
+
+  it("keeps the anti-click achievement hidden until a suspicious click is detected", () => {
+    expect(getUnlockedAchievements(false, false)).toEqual([]);
+    expect(getUnlockedAchievements(false, true)).toEqual([ANTI_CLICK_ACHIEVEMENT]);
+    expect(ANTI_CLICK_ACHIEVEMENT.title).toBe("Nhịp máy căng quá!");
+    expect(ANTI_CLICK_ACHIEVEMENT.description).toBe("Nghẹn mì cay rồi, chậm lại tí!");
+  });
+
+  it("shows both secret achievements when both have been earned", () => {
+    expect(getUnlockedAchievements(true, true)).toEqual([
+      BURNED_FINGER_ACHIEVEMENT,
+      ANTI_CLICK_ACHIEVEMENT,
+    ]);
   });
 });
 

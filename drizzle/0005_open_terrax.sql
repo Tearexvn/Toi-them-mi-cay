@@ -1,0 +1,2 @@
+ALTER TABLE `noodle_players` ADD `clickTimestamps` varchar(768) DEFAULT '[]' NOT NULL;--> statement-breakpoint
+ALTER TABLE `noodle_players` ADD `antiClickAchievementUnlocked` boolean DEFAULT false NOT NULL;
