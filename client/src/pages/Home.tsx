@@ -14,6 +14,7 @@ import {
   getUnlockedAchievements,
   isSecretHoldComplete,
   NOODLE_ACHIEVEMENTS,
+  ROBOT_CONFESSION_TAPS_REQUIRED,
   SECRET_HOLD_DURATION_MS,
 } from "@shared/noodle-achievements";
 import { leaderboardSelectionReducer, type LeaderboardBoard } from "@shared/leaderboard-selection";
@@ -144,8 +145,14 @@ export default function Home() {
   const [achievementDialogOpen, setAchievementDialogOpen] = useState(false);
   const [activeAchievementTab, setActiveAchievementTab] = useState<AchievementTab>("achievements");
   const [achievementToastOpen, setAchievementToastOpen] = useState(false);
-  const [antiClickToastOpen, setAntiClickToastOpen] = useState(false);
-  const [antiClickToastIsNewUnlock, setAntiClickToastIsNewUnlock] = useState(false);
+  const [robotAchievementToastOpen, setRobotAchievementToastOpen] = useState(false);
+  const [robotAchievementToastText, setRobotAchievementToastText] = useState("Bạn đã nhận thành tựu ẩn “robot ăn mì”");
+  const [antiClickWarningOpen, setAntiClickWarningOpen] = useState(false);
+  const [antiClickChallengeReady, setAntiClickChallengeReady] = useState(false);
+  const [robotConfessionCount, setRobotConfessionCount] = useState(0);
+  const [robotEaterUnlockedLocal, setRobotEaterUnlockedLocal] = useState(false);
+  const [robotButtonRect, setRobotButtonRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const robotDialogBodyRef = useRef<HTMLDivElement | null>(null);
   const [burnedFingerUnlockedLocal, setBurnedFingerUnlockedLocal] = useState(false);
   const [antiClickAchievementUnlockedLocal, setAntiClickAchievementUnlockedLocal] = useState(false);
   const [isHoldingNoodle, setIsHoldingNoodle] = useState(false);
@@ -153,11 +160,12 @@ export default function Home() {
   const [isExploding, setIsExploding] = useState(false);
   const [optimisticExperience, setOptimisticExperience] = useState<string | null>(null);
   const optimisticExperienceRef = useRef<string | null>(null);
+  const noodleButtonRef = useRef<HTMLButtonElement | null>(null);
   const holdStartedAtRef = useRef<number | null>(null);
   const holdIntervalRef = useRef<number | null>(null);
   const holdTriggeredRef = useRef(false);
   const toastTimeoutRef = useRef<number | null>(null);
-  const antiClickToastTimeoutRef = useRef<number | null>(null);
+  const robotToastTimeoutRef = useRef<number | null>(null);
   const clientClickTimestampsRef = useRef<number[]>([]);
   const clientClickBlockedUntilRef = useRef(0);
   const fireworksTimeoutRef = useRef<number | null>(null);
@@ -169,11 +177,10 @@ export default function Home() {
 
   const utils = trpc.useUtils();
 
-  function showAntiClickWarning(newlyUnlocked = false) {
-    setAntiClickToastIsNewUnlock(newlyUnlocked);
-    setAntiClickToastOpen(true);
-    if (antiClickToastTimeoutRef.current !== null) window.clearTimeout(antiClickToastTimeoutRef.current);
-    antiClickToastTimeoutRef.current = window.setTimeout(() => setAntiClickToastOpen(false), 5_500);
+  function showAntiClickWarning() {
+    setRobotConfessionCount(0);
+    setAntiClickChallengeReady(false);
+    setAntiClickWarningOpen(true);
   }
 
   const leaderboardInput = useMemo(
@@ -216,11 +223,48 @@ export default function Home() {
       document.removeEventListener("visibilitychange", cancelHoldOnHiddenPage);
       if (holdIntervalRef.current !== null) window.clearInterval(holdIntervalRef.current);
       if (toastTimeoutRef.current !== null) window.clearTimeout(toastTimeoutRef.current);
-      if (antiClickToastTimeoutRef.current !== null) window.clearTimeout(antiClickToastTimeoutRef.current);
+      if (robotToastTimeoutRef.current !== null) window.clearTimeout(robotToastTimeoutRef.current);
       if (fireworksTimeoutRef.current !== null) window.clearTimeout(fireworksTimeoutRef.current);
       if (explosionTimeoutRef.current !== null) window.clearTimeout(explosionTimeoutRef.current);
     };
   }, []);
+  useEffect(() => {
+    if (!antiClickWarningOpen) {
+      setRobotButtonRect(null);
+      return;
+    }
+    let frame = 0;
+    const updatePosition = () => {
+      const button = noodleButtonRef.current?.getBoundingClientRect();
+      const dialogBody = robotDialogBodyRef.current?.getBoundingClientRect();
+      if (!button || !dialogBody) return;
+      setRobotButtonRect({
+        left: button.left - dialogBody.left,
+        top: button.top - dialogBody.top,
+        width: button.width,
+        height: button.height,
+      });
+    };
+    frame = window.requestAnimationFrame(updatePosition);
+    const settleTimer = window.setTimeout(updatePosition, 280);
+    const finalTimer = window.setTimeout(updatePosition, 620);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(settleTimer);
+      window.clearTimeout(finalTimer);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [antiClickWarningOpen]);
+  useEffect(() => {
+    const player = leaderboard.data?.player;
+    if (!player?.robotChallengeActive) return;
+    setRobotConfessionCount(player.robotConfessionCount);
+    setAntiClickChallengeReady(true);
+    setAntiClickWarningOpen(true);
+  }, [leaderboard.data?.player?.robotChallengeActive, leaderboard.data?.player?.robotConfessionCount]);
   const joinPlayer = trpc.noodle.join.useMutation({
     onSuccess: (session) => {
       try {
@@ -232,12 +276,15 @@ export default function Home() {
       setPlayerToken(session.token);
       setPlayerName(session.name);
       setBurnedFingerUnlockedLocal(session.burnedFingerUnlocked);
+      setRobotEaterUnlockedLocal(session.robotEaterUnlocked);
       holdTriggeredRef.current = false;
       clientClickTimestampsRef.current = [];
       clientClickBlockedUntilRef.current = 0;
       setDraftName("");
       setAntiClickAchievementUnlockedLocal(session.antiClickAchievementUnlocked);
-      setAntiClickToastOpen(false);
+      setAntiClickWarningOpen(false);
+      setAntiClickChallengeReady(false);
+      setRobotConfessionCount(0);
       optimisticExperienceRef.current = null;
       setOptimisticExperience(null);
       setXpGainPops([]);
@@ -269,7 +316,8 @@ export default function Home() {
           setAntiClickAchievementUnlockedLocal(result.antiClickAchievementUnlocked);
           setAchievementToastOpen(false);
           if (toastTimeoutRef.current !== null) window.clearTimeout(toastTimeoutRef.current);
-          showAntiClickWarning(result.newlyUnlockedAntiClick);
+          showAntiClickWarning();
+          setAntiClickChallengeReady(true);
           if (result.newlyUnlockedAntiClick) {
             const fireworks = createAchievementFireworks();
             setAchievementFireworks(fireworks);
@@ -290,6 +338,32 @@ export default function Home() {
       await utils.noodle.leaderboard.invalidate();
     },
   });
+  const robotConfession = trpc.noodle.confessAsRobot.useMutation({
+    onSuccess: async (result) => {
+      setRobotConfessionCount(result.confessionCount);
+      if (result.unlocked) {
+        setAntiClickWarningOpen(false);
+        setAntiClickChallengeReady(false);
+        setRobotEaterUnlockedLocal(true);
+        setRobotAchievementToastOpen(true);
+        if (robotToastTimeoutRef.current !== null) window.clearTimeout(robotToastTimeoutRef.current);
+        robotToastTimeoutRef.current = window.setTimeout(() => setRobotAchievementToastOpen(false), 5_500);
+        const fireworks = createAchievementFireworks();
+        setAchievementFireworks(fireworks);
+        if (fireworksTimeoutRef.current !== null) window.clearTimeout(fireworksTimeoutRef.current);
+        fireworksTimeoutRef.current = window.setTimeout(() => setAchievementFireworks([]), 2_500);
+        await utils.noodle.leaderboard.invalidate();
+      }
+    },
+    onError: (error) => setNotice(error.message || "Chưa ghi nhận được lần thú nhận này."),
+  });
+  const resetRobotChallenge = trpc.noodle.resetRobotConfession.useMutation();
+  function closeAntiClickWarning() {
+    setAntiClickWarningOpen(false);
+    setAntiClickChallengeReady(false);
+    setRobotConfessionCount(0);
+    if (playerToken) resetRobotChallenge.mutate({ token: playerToken });
+  }
 
   const activeMood = moods.find((item) => item.id === mood) ?? moods[0];
   const lastRecordedTotalClicks = recordClick.variables?.token === playerToken
@@ -305,9 +379,10 @@ export default function Home() {
   const levelProgress = useMemo(() => getNoodleLevelProgress(experience), [experience]);
   const burnedFingerUnlocked = burnedFingerUnlockedLocal || Boolean(leaderboard.data?.player?.burnedFingerUnlocked);
   const antiClickAchievementUnlocked = antiClickAchievementUnlockedLocal || Boolean(leaderboard.data?.player?.antiClickAchievementUnlocked);
+  const robotEaterUnlocked = robotEaterUnlockedLocal || Boolean(leaderboard.data?.player?.robotEaterUnlocked);
   const specialAchievements = useMemo(
-    () => getUnlockedAchievements(burnedFingerUnlocked, antiClickAchievementUnlocked),
-    [burnedFingerUnlocked, antiClickAchievementUnlocked],
+    () => getUnlockedAchievements(burnedFingerUnlocked, antiClickAchievementUnlocked, robotEaterUnlocked),
+    [burnedFingerUnlocked, antiClickAchievementUnlocked, robotEaterUnlocked],
   );
   const unlockedAchievements = useMemo(
     () => [...NOODLE_ACHIEVEMENTS, ...specialAchievements],
@@ -381,7 +456,7 @@ export default function Home() {
       setParticles([]);
       setXpGainPops([]);
       setFireDrops([]);
-      showAntiClickWarning(false);
+      showAntiClickWarning();
       recordClick.mutate({ token: playerToken, mood, clientFlagged: true });
       return;
     }
@@ -454,7 +529,10 @@ export default function Home() {
     setPlayerName("");
     setBurnedFingerUnlockedLocal(false);
     setAntiClickAchievementUnlockedLocal(false);
-    setAntiClickToastOpen(false);
+    setRobotEaterUnlockedLocal(false);
+    setAntiClickWarningOpen(false);
+    setAntiClickChallengeReady(false);
+    setRobotConfessionCount(0);
     clientClickTimestampsRef.current = [];
     clientClickBlockedUntilRef.current = 0;
     holdTriggeredRef.current = false;
@@ -504,26 +582,51 @@ export default function Home() {
           </div>
         </div>
       )}
-      {antiClickToastOpen && (
+      {robotAchievementToastOpen && (
         <div className="achievement-toast-wrap">
           <div className="achievement-toast anti-click-toast" role="status" aria-live="polite" aria-atomic="true">
             <span className="achievement-toast-icon" aria-hidden="true">🤖</span>
-            <span className="achievement-toast-copy">
-              nghẹn mì cay rồi chậm lại tí!
-              <strong>{antiClickToastIsNewUnlock ? "Đã nhận thành tựu ẩn: Nhịp máy căng quá!" : "Lượt bấm bất thường đã bị chặn."}</strong>
-            </span>
-            <button
-              className="achievement-toast-close"
-              type="button"
-              aria-label="Đóng thông báo chống tự động bấm"
-              onClick={() => {
-                setAntiClickToastOpen(false);
-                if (antiClickToastTimeoutRef.current !== null) window.clearTimeout(antiClickToastTimeoutRef.current);
-              }}
-            >×</button>
+            <span className="achievement-toast-copy">Bạn đã nhận được thành tựu ẩn <strong>“robot ăn mì”</strong></span>
+            <button className="achievement-toast-close" type="button" aria-label="Đóng thông báo thành tựu robot" onClick={() => setRobotAchievementToastOpen(false)}>×</button>
           </div>
         </div>
       )}
+      <Dialog open={antiClickWarningOpen} onOpenChange={(open) => { if (open) setAntiClickWarningOpen(true); }}>
+        <DialogContent
+          className="robot-warning-dialog"
+          showCloseButton={false}
+          onEscapeKeyDown={(event) => event.preventDefault()}
+          onPointerDownOutside={(event) => event.preventDefault()}
+          aria-describedby="robot-warning-description"
+        >
+          <div className="robot-warning-body" ref={robotDialogBodyRef}>
+            <button className="robot-warning-close" type="button" aria-label="Đóng cảnh báo" onClick={closeAntiClickWarning}>×</button>
+            <div className="robot-warning-icon" aria-hidden="true">🤖</div>
+            <DialogHeader className="robot-warning-header">
+              <DialogTitle className="robot-warning-title">nghẹn mì cay rồi chậm lại tí!</DialogTitle>
+              <DialogDescription id="robot-warning-description" className="robot-warning-description">
+                Hệ thống tạm khóa nút mì vì nhịp bấm quá nhanh hoặc quá đều. Đóng bằng dấu × để thử lại sau.
+              </DialogDescription>
+            </DialogHeader>
+            <p className="robot-confession-progress" aria-live="polite">
+              {antiClickChallengeReady
+                ? `Tôi là robot: ${robotConfessionCount} / 10`
+                : "Đang xác nhận lượt bấm bị chặn…"}
+            </p>
+            {robotButtonRect && (
+              <button
+                className="robot-confession-button"
+                type="button"
+                style={{ left: robotButtonRect.left, top: robotButtonRect.top, width: robotButtonRect.width, height: robotButtonRect.height }}
+                disabled={!antiClickChallengeReady || robotConfession.isPending}
+                onClick={() => playerToken && robotConfession.mutate({ token: playerToken })}
+              >
+                {robotConfession.isPending ? "…" : "Tôi là robot"}
+              </button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       <div className="ambient ambient-one" aria-hidden="true">{activeMood.emoji}</div>
       <div className="ambient ambient-two" aria-hidden="true">🌶️</div>
       <div className="ambient ambient-three" aria-hidden="true">{activeMood.emoji}</div>
@@ -570,7 +673,8 @@ export default function Home() {
             <span className="welcome-avatar" aria-hidden="true">🍜</span>
             <span className="welcome-copy">đang chơi với tên <strong>{playerName}</strong>
               {burnedFingerUnlocked && <span className="secret-achievement-badge">🔥 Bỏng tay chưa?</span>}
-              {antiClickAchievementUnlocked && <span className="secret-achievement-badge anti-click-achievement-badge">🤖 Nhịp máy căng quá!</span>}
+              {antiClickAchievementUnlocked && <span className="secret-achievement-badge anti-click-achievement-badge">🤖 Nghẹn mất rồi</span>}
+              {robotEaterUnlocked && <span className="secret-achievement-badge robot-eater-achievement-badge">🤖 robot ăn mì</span>}
             </span>
             <button type="button" onClick={leavePlayer} className="change-player">đổi tên</button>
           </div>
@@ -586,7 +690,9 @@ export default function Home() {
             ))}
           </div>
           <button
+            ref={noodleButtonRef}
             className={`noodle-button ${isHoldingNoodle ? "is-holding" : ""} ${isExploding ? "is-exploding" : ""}`}
+            disabled={antiClickWarningOpen}
             onClick={makeItRain}
             onPointerDown={(event) => {
               if (event.pointerType === "mouse" && event.button !== 0) return;
@@ -824,7 +930,10 @@ export default function Home() {
                   <li key={entry.playerId} className={`leaderboard-row ${rank <= 3 ? `top-rank rank-${rank}` : ""} ${isMe ? "is-me" : ""}`}>
                     <span className="rank-number" aria-label={`Hạng ${rank}`}>{medalFor(rank)}</span>
                     <span className="rank-avatar" aria-hidden="true">{rank === 1 ? "👑" : "🍜"}</span>
-                    <span className="rank-name">{entry.name}{isMe && <span className="you-tag">BẠN</span>}</span>
+                    <span className="rank-name">
+                      {entry.robotIconActive && <span className="rank-robot-icon" title="Icon robot hết hạn lúc 0 giờ hôm sau" aria-label="Icon robot">🤖</span>}
+                      {entry.name}{isMe && <span className="you-tag">BẠN</span>}
+                    </span>
                     <span className="rank-score">{entry.score.toLocaleString("vi-VN")} <small>lần bấm</small></span>
                   </li>
                 );
@@ -833,7 +942,10 @@ export default function Home() {
                 <li className="leaderboard-row is-me outside-top">
                   <span className="rank-number">{leaderboard.data.me.rank}</span>
                   <span className="rank-avatar" aria-hidden="true">🍜</span>
-                  <span className="rank-name">{leaderboard.data.me.name}<span className="you-tag">BẠN</span></span>
+                  <span className="rank-name">
+                    {leaderboard.data.me.robotIconActive && <span className="rank-robot-icon" title="Icon robot hết hạn lúc 0 giờ hôm sau" aria-label="Icon robot">🤖</span>}
+                    {leaderboard.data.me.name}<span className="you-tag">BẠN</span>
+                  </span>
                   <span className="rank-score">{leaderboard.data.me.score.toLocaleString("vi-VN")} <small>lần bấm</small></span>
                 </li>
               )}

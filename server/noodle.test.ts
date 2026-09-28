@@ -50,11 +50,6 @@ describe("noodle player names", () => {
     await expectBadRequest(() => caller.noodle.unlockBurnedFinger({ token: "short" }));
   });
 
-  it("rejects short tokens before attempting to unlock an achievement", async () => {
-    const caller = createPublicCaller();
-    await expectBadRequest(() => caller.noodle.unlockBurnedFinger({ token: "short" }));
-  });
-
   it("rejects unsupported topping values", async () => {
     const caller = createPublicCaller();
     await expectBadRequest(() => caller.noodle.click({ token: "a".repeat(32), mood: "pizza" as never }));
@@ -63,5 +58,11 @@ describe("noodle player names", () => {
   it("rejects unsupported leaderboard names before querying the database", async () => {
     const caller = createPublicCaller();
     await expectBadRequest(() => caller.noodle.leaderboard({ board: "dessert" as never }));
+  });
+
+  it("requires a valid session token for robot confessions and challenge resets", async () => {
+    const caller = createPublicCaller();
+    await expectBadRequest(() => caller.noodle.confessAsRobot({ token: "short" }));
+    await expectBadRequest(() => caller.noodle.resetRobotConfession({ token: "short" }));
   });
 });

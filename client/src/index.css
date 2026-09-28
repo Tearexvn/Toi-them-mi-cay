@@ -467,9 +467,29 @@ button { font: inherit; }
 .achievement-toast-close:hover { background: rgba(122, 77, 44, .1); color: #4d3022; }
 .achievement-toast-close:focus-visible { outline: 2px solid #633a27; outline-offset: 2px; }
 @keyframes achievement-toast-enter { from { opacity: 0; transform: translateY(-8px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.robot-warning-dialog { width: min(460px, calc(100vw - 28px)); max-width: 460px; overflow: visible; border: 1px solid rgba(189, 69, 35, .22); border-radius: 24px; padding: 0; background: linear-gradient(145deg, #fffaf0, #fff0e2); color: #44291f; box-shadow: 0 28px 90px rgba(58, 35, 22, .32); }
+.robot-warning-body { position: relative; min-height: 260px; overflow: visible; padding: 29px 26px 22px; text-align: center; }
+.robot-warning-close { position: absolute; z-index: 12; top: 10px; right: 10px; display: grid; width: 29px; height: 29px; place-items: center; border: 1px solid rgba(104, 68, 43, .13); border-radius: 50%; background: rgba(255,255,255,.66); color: #765a47; font: inherit; font-size: 21px; line-height: 1; cursor: pointer; }
+.robot-warning-close:hover { background: #fff; color: #a42e17; }
+.robot-warning-close:focus-visible { outline: 3px solid #3f261d; outline-offset: 2px; }
+.robot-warning-icon { display: grid; width: 54px; height: 54px; place-items: center; margin: 0 auto 12px; border: 1px solid rgba(156, 104, 59, .17); border-radius: 18px; background: #fff5de; font-size: 29px; }
+.robot-warning-header { align-items: center; gap: 8px; text-align: center; }
+.robot-warning-title { max-width: 330px; color: #a4351b; font-family: "Bricolage Grotesque", sans-serif; font-size: 23px; font-weight: 850; letter-spacing: -.035em; line-height: 1.14; }
+.robot-warning-description { max-width: 340px; color: #8c725d; font-size: 12px; line-height: 1.65; }
+.robot-confession-progress { min-height: 16px; margin: 15px 0 0; color: #a04327; font-size: 11px; font-weight: 800; }
+.robot-confession-button { position: absolute; z-index: 10; display: grid; place-items: center; border: 2px solid rgba(255, 230, 186, .8); border-radius: 999px; background: linear-gradient(135deg, #e24520, #c42e15); color: #fff9ed; font: inherit; font-size: 15px; font-weight: 900; box-shadow: 0 8px 0 #8f2918, 0 16px 30px rgba(115, 45, 26, .32); cursor: pointer; transition: filter 140ms ease, transform 140ms cubic-bezier(.23,1,.32,1); }
+.robot-confession-button:hover:not(:disabled) { filter: brightness(1.08); }
+.robot-confession-button:active:not(:disabled) { transform: scale(.97); }
+.robot-confession-button:disabled { cursor: wait; opacity: .92; }
+.robot-confession-button:focus-visible { outline: 4px solid #3f261d; outline-offset: 4px; }
+.rank-robot-icon { display: inline-block; margin-right: 5px; vertical-align: -1px; font-size: 13px; }
+.robot-eater-achievement-badge { background: linear-gradient(90deg, #e4eee9, #e7e9d8); color: #516648; }
 @media (max-width: 540px) {
   .achievement-toast { gap: 9px; padding: 11px; }
   .achievement-toast-copy { font-size: 11px; }
+  .robot-warning-body { min-height: 270px; padding: 27px 18px 20px; }
+  .robot-warning-title { font-size: 21px; }
+  .robot-warning-description { font-size: 11px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .achievement-firework { animation: none; opacity: .85; transform: none; }

@@ -1,0 +1,1 @@
+ALTER TABLE `noodle_players` ADD `robotChallengeActive` boolean DEFAULT false NOT NULL;

@@ -12,6 +12,8 @@ import {
   NoodleBoard,
   NoodleMood,
   recordNoodleClick,
+  confessAsRobot,
+  resetRobotConfession,
   unlockBurnedFingerAchievement,
 } from "./db";
 
@@ -74,6 +76,30 @@ export const appRouter = router({
             throw new TRPCError({ code: "UNAUTHORIZED", message: "Phiên chơi không còn hợp lệ. Hãy nhập lại tên nhé." });
           }
           return { newlyUnlocked };
+        } catch (error) {
+          if (error instanceof TRPCError) throw error;
+          mapIdentityError(error);
+        }
+      }),
+    confessAsRobot: publicProcedure
+      .input(z.object({ token: tokenInput }))
+      .mutation(async ({ input }) => {
+        try {
+          const result = await confessAsRobot(input.token);
+          if (!result) throw new TRPCError({ code: "UNAUTHORIZED", message: "Phiên chơi không còn hợp lệ. Hãy nhập lại tên nhé." });
+          return result;
+        } catch (error) {
+          if (error instanceof TRPCError) throw error;
+          mapIdentityError(error);
+        }
+      }),
+    resetRobotConfession: publicProcedure
+      .input(z.object({ token: tokenInput }))
+      .mutation(async ({ input }) => {
+        try {
+          const reset = await resetRobotConfession(input.token);
+          if (!reset) throw new TRPCError({ code: "UNAUTHORIZED", message: "Phiên chơi không còn hợp lệ. Hãy nhập lại tên nhé." });
+          return { reset: true } as const;
         } catch (error) {
           if (error instanceof TRPCError) throw error;
           mapIdentityError(error);

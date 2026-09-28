@@ -1,4 +1,4 @@
-import { boolean, int, longtext, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { bigint, boolean, int, longtext, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing the optional Manus OAuth flow.
@@ -32,6 +32,10 @@ export const noodlePlayers = mysqlTable("noodle_players", {
   burnedFingerUnlocked: boolean("burnedFingerUnlocked").default(false).notNull(),
   clickTimestamps: varchar("clickTimestamps", { length: 768 }).default("[]").notNull(),
   antiClickAchievementUnlocked: boolean("antiClickAchievementUnlocked").default(false).notNull(),
+  robotChallengeActive: boolean("robotChallengeActive").default(false).notNull(),
+  robotConfessionCount: int("robotConfessionCount", { unsigned: true }).default(0).notNull(),
+  robotEaterUnlocked: boolean("robotEaterUnlocked").default(false).notNull(),
+  robotIconExpiresAt: bigint("robotIconExpiresAt", { mode: "number", unsigned: true }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

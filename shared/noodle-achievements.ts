@@ -17,20 +17,65 @@ export const BURNED_FINGER_ACHIEVEMENT: NoodleAchievement = {
 
 export const ANTI_CLICK_ACHIEVEMENT: NoodleAchievement = {
   id: "anti-click",
-  title: "Nhịp máy căng quá!",
-  description: "Nghẹn mì cay rồi, chậm lại tí!",
+  title: "Nghẹn mất rồi",
+  description: "nghẹn mì cay rồi chậm lại tí!",
   icon: "🤖",
 };
+
+export const ROBOT_EATER_ACHIEVEMENT: NoodleAchievement = {
+  id: "robot-eater",
+  title: "robot ăn mì",
+  description: "Tự nhận mình là robot và vẫn cố bấm tiếp.",
+  icon: "🤖",
+};
+
+export const ROBOT_CONFESSION_TAPS_REQUIRED = 10;
+
+const VIETNAM_UTC_OFFSET_MS = 7 * 60 * 60 * 1_000;
+
+export function getNextVietnamMidnight(now: number = Date.now()): number {
+  const vietnamNow = new Date(now + VIETNAM_UTC_OFFSET_MS);
+  const nextVietnamMidnightAsUtc = Date.UTC(
+    vietnamNow.getUTCFullYear(),
+    vietnamNow.getUTCMonth(),
+    vietnamNow.getUTCDate() + 1,
+  );
+  return nextVietnamMidnightAsUtc - VIETNAM_UTC_OFFSET_MS;
+}
+
+export function advanceRobotConfession(
+  currentCount: number,
+  alreadyUnlocked: boolean,
+  now: number = Date.now(),
+) {
+  const nextCount = Math.max(0, Math.trunc(currentCount)) + 1;
+  if (nextCount < ROBOT_CONFESSION_TAPS_REQUIRED) {
+    return {
+      confessionCount: nextCount,
+      unlocked: false,
+      newlyUnlocked: false,
+      robotIconExpiresAt: null,
+    } as const;
+  }
+  return {
+    confessionCount: 0,
+    unlocked: true,
+    newlyUnlocked: !alreadyUnlocked,
+    robotIconExpiresAt: getNextVietnamMidnight(now),
+  } as const;
+}
 
 export const NOODLE_ACHIEVEMENTS: readonly NoodleAchievement[] = [];
 
 export function getUnlockedAchievements(
   hasBurnedFinger: boolean,
   hasAntiClickAchievement = false,
+  hasRobotEaterAchievement = false,
 ): readonly NoodleAchievement[] {
   return [
     ...(hasBurnedFinger ? [BURNED_FINGER_ACHIEVEMENT] : []),
     ...(hasAntiClickAchievement ? [ANTI_CLICK_ACHIEVEMENT] : []),
+    ...(hasRobotEaterAchievement ? [ROBOT_EATER_ACHIEVEMENT] : []),
   ];
 }
 

@@ -23,14 +23,16 @@ describe("detectSuspiciousClickPattern", () => {
     expect(detectSuspiciousClickPattern(clicks, 80_000 + 20 * 40)).toBe("rate-limit");
   });
 
-  it("flags eight consecutive machine-regular intervals below the rate cap", () => {
-    expect(detectSuspiciousClickPattern(timestampsAtInterval(9, 250))).toBe("machine-like-timing");
+  it("allows short regular streaks and flags twenty consecutive machine-regular intervals", () => {
+    expect(detectSuspiciousClickPattern(timestampsAtInterval(9, 250))).toBeNull();
+    expect(detectSuspiciousClickPattern(timestampsAtInterval(21, 250))).toBe("machine-like-timing");
   });
 
-  it("does not flag varied human timing or too-short samples", () => {
+  it("does not flag varied human timing or small but non-machine jitter", () => {
     const varied = [0, 260, 590, 830, 1_160, 1_390, 1_710, 1_970, 2_290].map((value) => 100_000 + value);
     expect(detectSuspiciousClickPattern(varied)).toBeNull();
-    expect(detectSuspiciousClickPattern(timestampsAtInterval(8, 250))).toBeNull();
+    const lightlyJittered = Array.from({ length: 21 }, (_, index) => 200_000 + index * 250 + (index % 2 === 0 ? 0 : 7));
+    expect(detectSuspiciousClickPattern(lightlyJittered)).toBeNull();
   });
 
   it("ignores timestamps outside the rolling rate window", () => {

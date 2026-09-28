@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, asc, count, desc, eq, gt, lt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { CLICK_HISTORY_LIMIT, detectSuspiciousClickPattern, type AntiAutoClickReason } from "../shared/anti-auto-click";
+import { advanceRobotConfession, ROBOT_CONFESSION_TAPS_REQUIRED } from "../shared/noodle-achievements";
 import { InsertUser, noodlePlayers, NoodlePlayer, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -124,6 +125,9 @@ async function openPlayerSession(
     loginTokenHash: string;
     burnedFingerUnlocked: boolean;
     antiClickAchievementUnlocked: boolean;
+    robotEaterUnlocked: boolean;
+    robotChallengeActive: boolean;
+    robotConfessionCount: number;
   },
   suppliedToken?: string,
 ) {
@@ -135,6 +139,9 @@ async function openPlayerSession(
       returning: true,
       burnedFingerUnlocked: player.burnedFingerUnlocked,
       antiClickAchievementUnlocked: player.antiClickAchievementUnlocked,
+      robotEaterUnlocked: player.robotEaterUnlocked,
+      robotChallengeActive: player.robotChallengeActive,
+      robotConfessionCount: player.robotConfessionCount,
     };
   }
 
@@ -149,6 +156,9 @@ async function openPlayerSession(
     returning: true,
     burnedFingerUnlocked: player.burnedFingerUnlocked,
     antiClickAchievementUnlocked: player.antiClickAchievementUnlocked,
+    robotEaterUnlocked: player.robotEaterUnlocked,
+    robotChallengeActive: player.robotChallengeActive,
+    robotConfessionCount: player.robotConfessionCount,
   };
 }
 
@@ -162,6 +172,9 @@ export async function joinNoodlePlayer(name: string, existingToken?: string) {
     loginTokenHash: noodlePlayers.loginTokenHash,
     burnedFingerUnlocked: noodlePlayers.burnedFingerUnlocked,
     antiClickAchievementUnlocked: noodlePlayers.antiClickAchievementUnlocked,
+    robotEaterUnlocked: noodlePlayers.robotEaterUnlocked,
+    robotChallengeActive: noodlePlayers.robotChallengeActive,
+    robotConfessionCount: noodlePlayers.robotConfessionCount,
   }).from(noodlePlayers).where(eq(noodlePlayers.nameKey, nameKey)).limit(1);
 
   if (existing[0]) return openPlayerSession(db, existing[0], existingToken);
@@ -190,6 +203,9 @@ export async function joinNoodlePlayer(name: string, existingToken?: string) {
         loginTokenHash: noodlePlayers.loginTokenHash,
         burnedFingerUnlocked: noodlePlayers.burnedFingerUnlocked,
         antiClickAchievementUnlocked: noodlePlayers.antiClickAchievementUnlocked,
+        robotEaterUnlocked: noodlePlayers.robotEaterUnlocked,
+        robotChallengeActive: noodlePlayers.robotChallengeActive,
+        robotConfessionCount: noodlePlayers.robotConfessionCount,
       }).from(noodlePlayers).where(eq(noodlePlayers.nameKey, nameKey)).limit(1);
       if (racedPlayer[0]) return openPlayerSession(db, racedPlayer[0]);
     }
@@ -201,6 +217,9 @@ export async function joinNoodlePlayer(name: string, existingToken?: string) {
     displayName: noodlePlayers.displayName,
     burnedFingerUnlocked: noodlePlayers.burnedFingerUnlocked,
     antiClickAchievementUnlocked: noodlePlayers.antiClickAchievementUnlocked,
+    robotEaterUnlocked: noodlePlayers.robotEaterUnlocked,
+    robotChallengeActive: noodlePlayers.robotChallengeActive,
+    robotConfessionCount: noodlePlayers.robotConfessionCount,
   })
     .from(noodlePlayers).where(eq(noodlePlayers.nameKey, nameKey)).limit(1);
   if (!created[0]) throw new Error("Could not load the newly created player");
@@ -211,6 +230,9 @@ export async function joinNoodlePlayer(name: string, existingToken?: string) {
     returning: false,
     burnedFingerUnlocked: created[0].burnedFingerUnlocked,
     antiClickAchievementUnlocked: created[0].antiClickAchievementUnlocked,
+      robotEaterUnlocked: created[0].robotEaterUnlocked,
+      robotChallengeActive: created[0].robotChallengeActive,
+      robotConfessionCount: created[0].robotConfessionCount,
   };
 }
 
@@ -230,11 +252,17 @@ export async function getNoodleLeaderboard(token?: string, board: NoodleBoard = 
     playerId: noodlePlayers.id,
     name: noodlePlayers.displayName,
     score: scoreColumn,
+    robotIconExpiresAt: noodlePlayers.robotIconExpiresAt,
   }).from(noodlePlayers).where(board === "total" ? undefined : gt(scoreColumn, 0))
     .orderBy(desc(scoreColumn), asc(noodlePlayers.id))
     .limit(10);
+  const now = Date.now();
+  const rankedTop = top.map(({ robotIconExpiresAt, ...entry }) => ({
+    ...entry,
+    robotIconActive: Number(robotIconExpiresAt ?? 0) > now,
+  }));
 
-  let me: { playerId: number; name: string; score: number; rank: number } | null = null;
+  let me: { playerId: number; name: string; score: number; rank: number; robotIconActive: boolean } | null = null;
   let playerProgress: {
     playerId: number;
     name: string;
@@ -242,6 +270,10 @@ export async function getNoodleLeaderboard(token?: string, board: NoodleBoard = 
     experience: string;
     burnedFingerUnlocked: boolean;
     antiClickAchievementUnlocked: boolean;
+    robotEaterUnlocked: boolean;
+    robotIconActive: boolean;
+    robotChallengeActive: boolean;
+    robotConfessionCount: number;
   } | null = null;
   if (token) {
     const tokenHash = hashToken(token);
@@ -253,6 +285,10 @@ export async function getNoodleLeaderboard(token?: string, board: NoodleBoard = 
       experience: noodlePlayers.experience,
       burnedFingerUnlocked: noodlePlayers.burnedFingerUnlocked,
       antiClickAchievementUnlocked: noodlePlayers.antiClickAchievementUnlocked,
+      robotEaterUnlocked: noodlePlayers.robotEaterUnlocked,
+      robotIconExpiresAt: noodlePlayers.robotIconExpiresAt,
+      robotChallengeActive: noodlePlayers.robotChallengeActive,
+      robotConfessionCount: noodlePlayers.robotConfessionCount,
     }).from(noodlePlayers).where(eq(noodlePlayers.loginTokenHash, tokenHash)).limit(1);
     const player = playerRows[0];
     if (player) {
@@ -263,6 +299,10 @@ export async function getNoodleLeaderboard(token?: string, board: NoodleBoard = 
         experience: player.experience,
         burnedFingerUnlocked: player.burnedFingerUnlocked,
         antiClickAchievementUnlocked: player.antiClickAchievementUnlocked,
+        robotEaterUnlocked: player.robotEaterUnlocked,
+        robotIconActive: Number(player.robotIconExpiresAt ?? 0) > now,
+        robotChallengeActive: player.robotChallengeActive,
+        robotConfessionCount: player.robotConfessionCount,
       };
     }
     if (player && (board === "total" || player.score > 0)) {
@@ -275,11 +315,12 @@ export async function getNoodleLeaderboard(token?: string, board: NoodleBoard = 
         name: player.name,
         score: player.score,
         rank: Number(ahead[0]?.value ?? 0) + Number(sameScoreAhead[0]?.value ?? 0) + 1,
+        robotIconActive: Number(player.robotIconExpiresAt ?? 0) > now,
       };
     }
   }
 
-  return { top, me, player: playerProgress };
+  return { top: rankedTop, me, player: playerProgress };
 }
 
 export async function recordNoodleClick(
@@ -296,12 +337,23 @@ export async function recordNoodleClick(
       experience: noodlePlayers.experience,
       clickTimestamps: noodlePlayers.clickTimestamps,
       antiClickAchievementUnlocked: noodlePlayers.antiClickAchievementUnlocked,
+      robotChallengeActive: noodlePlayers.robotChallengeActive,
     })
       .from(noodlePlayers).where(eq(noodlePlayers.loginTokenHash, tokenHash)).limit(1).for("update");
     const player = playerRows[0];
     if (!player) return null;
 
     const previousExperience = player.experience || "0";
+    if (player.robotChallengeActive) {
+      const activePlayer = await tx.select().from(noodlePlayers).where(eq(noodlePlayers.id, player.id)).limit(1);
+      return activePlayer[0] ? {
+        player: activePlayer[0],
+        previousExperience,
+        accepted: false,
+        suspiciousReason: "challenge-active",
+        newlyUnlockedAntiClick: false,
+      } : null;
+    }
     let previousClickTimestamps: number[] = [];
     try {
       const storedTimestamps: unknown = JSON.parse(player.clickTimestamps || "[]");
@@ -325,6 +377,8 @@ export async function recordNoodleClick(
       await tx.update(noodlePlayers).set({
         clickTimestamps: JSON.stringify(clickTimestamps),
         antiClickAchievementUnlocked: true,
+        robotChallengeActive: true,
+        robotConfessionCount: 0,
       }).where(eq(noodlePlayers.id, player.id));
       const flagged = await tx.select().from(noodlePlayers).where(eq(noodlePlayers.id, player.id)).limit(1);
       return flagged[0] ? {
@@ -375,6 +429,54 @@ export async function unlockBurnedFingerAchievement(token: string): Promise<bool
     if (!player) return null;
     if (player.unlocked) return false;
     await tx.update(noodlePlayers).set({ burnedFingerUnlocked: true }).where(eq(noodlePlayers.id, player.id));
+    return true;
+  });
+}
+
+export async function confessAsRobot(token: string) {
+  const db = await requireNoodleDb();
+  const tokenHash = hashToken(token);
+  return db.transaction(async (tx) => {
+    const rows = await tx.select({
+      id: noodlePlayers.id,
+      confessionCount: noodlePlayers.robotConfessionCount,
+      unlocked: noodlePlayers.robotEaterUnlocked,
+      challengeActive: noodlePlayers.robotChallengeActive,
+    }).from(noodlePlayers).where(eq(noodlePlayers.loginTokenHash, tokenHash)).limit(1).for("update");
+    const player = rows[0];
+    if (!player || !player.challengeActive) return null;
+
+    const result = advanceRobotConfession(player.confessionCount, player.unlocked);
+    if (result.unlocked) {
+      await tx.update(noodlePlayers).set({
+        robotConfessionCount: 0,
+        robotEaterUnlocked: true,
+        robotChallengeActive: false,
+        robotIconExpiresAt: result.robotIconExpiresAt,
+      }).where(eq(noodlePlayers.id, player.id));
+    } else {
+      await tx.update(noodlePlayers).set({ robotConfessionCount: result.confessionCount })
+        .where(eq(noodlePlayers.id, player.id));
+    }
+    return {
+      confessionCount: result.confessionCount,
+      tapsRequired: ROBOT_CONFESSION_TAPS_REQUIRED,
+      unlocked: result.unlocked,
+      newlyUnlocked: result.newlyUnlocked,
+      robotIconExpiresAt: result.robotIconExpiresAt,
+    };
+  });
+}
+
+export async function resetRobotConfession(token: string): Promise<boolean> {
+  const db = await requireNoodleDb();
+  const tokenHash = hashToken(token);
+  return db.transaction(async (tx) => {
+    const rows = await tx.select({ id: noodlePlayers.id })
+      .from(noodlePlayers).where(eq(noodlePlayers.loginTokenHash, tokenHash)).limit(1).for("update");
+    if (!rows[0]) return false;
+    await tx.update(noodlePlayers).set({ robotConfessionCount: 0, robotChallengeActive: false })
+      .where(eq(noodlePlayers.id, rows[0].id));
     return true;
   });
 }

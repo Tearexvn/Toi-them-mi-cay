@@ -1,14 +1,14 @@
 export const MAX_CLICKS_PER_SECOND = 20;
 export const CLICK_RATE_WINDOW_MS = 1_000;
 export const CLICK_HISTORY_LIMIT = 32;
-export const MACHINE_PATTERN_INTERVAL_COUNT = 8;
+export const MACHINE_PATTERN_INTERVAL_COUNT = 20;
 
-const MIN_MACHINE_INTERVAL_MS = 45;
-const MAX_MACHINE_INTERVAL_MS = 1_000;
-const MAX_MACHINE_INTERVAL_SPREAD_MS = 24;
-const MAX_MACHINE_INTERVAL_COEFFICIENT_OF_VARIATION = 0.045;
+const MIN_MACHINE_INTERVAL_MS = 50;
+const MAX_MACHINE_INTERVAL_MS = 900;
+const MAX_MACHINE_INTERVAL_SPREAD_MS = 8;
+const MAX_MACHINE_INTERVAL_COEFFICIENT_OF_VARIATION = 0.015;
 
-export type AntiAutoClickReason = "rate-limit" | "machine-like-timing" | "client-flagged";
+export type AntiAutoClickReason = "rate-limit" | "machine-like-timing" | "client-flagged" | "challenge-active";
 
 /**
  * Inspects server-received click timestamps. A rate-limit breach always wins;
