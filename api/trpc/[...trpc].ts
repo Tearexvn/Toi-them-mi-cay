@@ -7,8 +7,8 @@ export default async function handler(req: Request, res: Response) {
       import("@trpc/server/adapters/express"),
     ]);
     const [{ appRouter }, { createContext }] = await Promise.all([
-      import("../../server/routers"),
-      import("../../server/_core/context"),
+      import("../../server/routers.js"),
+      import("../../server/_core/context.js"),
     ]);
 
     const app = express();
