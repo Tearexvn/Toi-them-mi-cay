@@ -11,7 +11,7 @@ import {
   ROBOT_EATER_ACHIEVEMENT,
   ROBOT_CONFESSION_TAPS_REQUIRED,
   SECRET_HOLD_DURATION_MS,
-} from "../shared/noodle-achievements";
+} from "../shared/noodle-achievements.js";
 
 describe("achievement panel state", () => {
   it("keeps the secret achievement completely absent until unlocked", () => {

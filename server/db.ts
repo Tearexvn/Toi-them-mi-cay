@@ -2,10 +2,10 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, asc, count, desc, eq, gt, lt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { CLICK_HISTORY_LIMIT, detectSuspiciousClickPattern, type AntiAutoClickReason } from "../shared/anti-auto-click";
-import { advanceRobotConfession, ROBOT_CONFESSION_TAPS_REQUIRED } from "../shared/noodle-achievements";
-import { InsertUser, noodlePlayers, NoodlePlayer, users } from "../drizzle/schema";
-import { ENV } from './_core/env';
+import { CLICK_HISTORY_LIMIT, detectSuspiciousClickPattern, type AntiAutoClickReason } from "../shared/anti-auto-click.js";
+import { advanceRobotConfession, ROBOT_CONFESSION_TAPS_REQUIRED } from "../shared/noodle-achievements.js";
+import { InsertUser, noodlePlayers, NoodlePlayer, users } from "../drizzle/schema.js";
+import { ENV } from './_core/env.js';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 

@@ -5,7 +5,7 @@ import {
   getNoodleLevelProgress,
   maxNoodleExperience,
   removeNoodleExperience,
-} from "../shared/noodle-level";
+} from "../shared/noodle-level.js";
 
 const xp = (value: number | string) => BigInt(value);
 

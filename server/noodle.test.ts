@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { TRPCError } from "@trpc/server";
-import { normalizeNoodleName } from "./db";
-import { appRouter } from "./routers";
-import type { TrpcContext } from "./_core/context";
+import { normalizeNoodleName } from "./db.js";
+import { appRouter } from "./routers.js";
+import type { TrpcContext } from "./_core/context.js";
 
 function createPublicCaller() {
   const ctx: TrpcContext = {

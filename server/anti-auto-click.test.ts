@@ -3,7 +3,7 @@ import {
   CLICK_RATE_WINDOW_MS,
   detectSuspiciousClickPattern,
   MAX_CLICKS_PER_SECOND,
-} from "../shared/anti-auto-click";
+} from "../shared/anti-auto-click.js";
 
 function timestampsAtInterval(count: number, intervalMs: number, startAt = 10_000) {
   return Array.from({ length: count }, (_, index) => startAt + index * intervalMs);

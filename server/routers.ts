@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { COOKIE_NAME } from "../shared/const";
-import { getSessionCookieOptions } from "./_core/cookies";
-import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { COOKIE_NAME } from "../shared/const.js";
+import { getSessionCookieOptions } from "./_core/cookies.js";
+import { systemRouter } from "./_core/systemRouter.js";
+import { publicProcedure, router } from "./_core/trpc.js";
 import {
   checkDatabaseHealth,
   getNoodleLeaderboard,
@@ -16,7 +16,7 @@ import {
   confessAsRobot,
   resetRobotConfession,
   unlockBurnedFingerAchievement,
-} from "./db";
+} from "./db.js";
 
 const nameInput = z.string().trim().min(1, "Nhập tên trước đã nhé.").max(24, "Tên tối đa 24 ký tự thôi nhé.")
   .refine((value) => !/[<>\u0000-\u001f\u007f]/.test(value), "Tên có ký tự không hợp lệ.");

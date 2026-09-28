@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { interleaveNoodleAndTopping, NOODLE_BOWL_EMOJI } from "../shared/noodle-particles";
+import { interleaveNoodleAndTopping, NOODLE_BOWL_EMOJI } from "../shared/noodle-particles.js";
 
 describe("interleaveNoodleAndTopping", () => {
   it.each([

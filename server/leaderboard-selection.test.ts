@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leaderboardSelectionReducer, type LeaderboardBoard } from "../shared/leaderboard-selection";
+import { leaderboardSelectionReducer, type LeaderboardBoard } from "../shared/leaderboard-selection.js";
 
 describe("leaderboard selection", () => {
   it.each<LeaderboardBoard>(["total", "beef", "chicken", "octopus"])(
