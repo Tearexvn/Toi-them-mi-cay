@@ -21,8 +21,7 @@ export default async function handler(req: Request, res: Response) {
     }
     return app(req, res);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     console.error("[Vercel tRPC] Startup failed", error);
-    return res.status(500).json({ error: "SERVER_INITIALIZATION_FAILED", message });
+    return res.status(500).json({ error: "SERVER_INITIALIZATION_FAILED" });
   }
 }
