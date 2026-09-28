@@ -324,6 +324,10 @@ button { font: inherit; }
 .welcome-avatar { display: grid; width: 27px; height: 27px; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--accent) 11%, white); font-size: 15px; }
 .change-player { margin-left: 3px; border: 0; border-left: 1px solid rgba(100, 64, 40, .16); padding: 2px 0 2px 10px; background: transparent; color: var(--accent-deep); font: inherit; font-size: 10px; font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
 .action-notice { max-width: 330px; margin: 7px 0 0; color: var(--accent-deep); font-size: 11px; }
+.database-health { display: inline-flex; align-items: center; gap: 6px; margin: 7px 0 0; color: #9a8373; font-size: 10px; letter-spacing: .02em; }
+.database-health-dot { width: 6px; height: 6px; border-radius: 50%; background: #c8957d; box-shadow: 0 0 0 3px rgba(200, 149, 125, .12); }
+.database-health.is-online { color: #63846d; }
+.database-health.is-online .database-health-dot { background: #6ba27a; box-shadow: 0 0 0 3px rgba(107, 162, 122, .14); }
 
 .leaderboard-wrap { position: relative; z-index: 1; display: flex; justify-content: center; width: 100%; padding: 7px 20px 50px; box-sizing: border-box; }
 .leaderboard-card { width: min(560px, 100%); overflow: hidden; border: 1px solid rgba(104, 68, 43, .14); border-radius: 22px; background: rgba(255, 252, 243, .7); box-shadow: 0 18px 48px rgba(83, 56, 33, .07), inset 0 1px 0 rgba(255,255,255,.8); backdrop-filter: blur(10px); }

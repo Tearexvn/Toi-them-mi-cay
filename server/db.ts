@@ -68,6 +68,19 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   }
 }
 
+export async function checkDatabaseHealth(): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  try {
+    await db.execute(sql`select 1`);
+    return true;
+  } catch (error) {
+    console.warn("[Database] Health check failed:", error);
+    return false;
+  }
+}
+
 export async function getUserByOpenId(openId: string) {
   const db = await getDb();
   if (!db) {

@@ -5,6 +5,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import {
+  checkDatabaseHealth,
   getNoodleLeaderboard,
   joinNoodlePlayer,
   NoodleIdentityError,
@@ -44,6 +45,9 @@ export const appRouter = router({
       return { success: true } as const;
     }),
   }),
+  health: publicProcedure.query(async () => ({
+    database: await checkDatabaseHealth(),
+  })),
   noodle: router({
     leaderboard: publicProcedure
       .input(z.object({ token: tokenInput.optional(), board: boardInput.optional() }).optional())

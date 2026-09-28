@@ -191,6 +191,11 @@ export default function Home() {
     leaderboardInput,
     { refetchInterval: 10_000, refetchOnWindowFocus: true, retry: 1 },
   );
+  const databaseHealth = trpc.health.useQuery(undefined, {
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    retry: 1,
+  });
   const unlockAchievement = trpc.noodle.unlockBurnedFinger.useMutation({
     onSuccess: (result) => {
       setBurnedFingerUnlockedLocal(true);
@@ -760,6 +765,10 @@ export default function Home() {
             : `Tổng: ${totalClicks.toLocaleString("vi-VN")} lần bấm`}
         </div>
         {notice && <p className="action-notice" role="status">{notice}</p>}
+        <p className={`database-health ${databaseHealth.data?.database ? "is-online" : "is-offline"}`} role="status" aria-live="polite">
+          <span aria-hidden="true" className="database-health-dot" />
+          {databaseHealth.isLoading ? "Đang kiểm tra kết nối…" : databaseHealth.data?.database ? "Kết nối Supabase ổn định" : "Supabase chưa kết nối"}
+        </p>
 
         <Dialog open={achievementDialogOpen} onOpenChange={setAchievementDialogOpen}>
           <DialogTrigger asChild>
